@@ -1,18 +1,21 @@
 const _ = require('lodash');
 const tokenizer = /[\W\d]+/;
+const natural = require('natural');
 
 function tokenize(text) {
   return _.uniq(text.split(tokenizer)
     .map((token) => token.toLowerCase())
+    .map(natural.PorterStemmer.stem)
     .filter(Boolean));
 }
 
 function searchTerm(db, term, channel) {
   return new Promise((resolve, reject) => {
-    let results = [];
+    const results = [];
+    const stemmedTerm = natural.PorterStemmer.stem(term);
     db.createReadStream({ 
-      gte: '%' + channel + ':' + term, 
-      lt: '%' + channel + ':' + term + '~' 
+      gte: '%' + channel + ':' + stemmedTerm, 
+      lt: '%' + channel + ':' + stemmedTerm + '~' 
     }).on('error', reject)
       .on('end', () => resolve(results))
       .on('close', () => resolve(results))

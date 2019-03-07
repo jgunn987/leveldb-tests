@@ -16,9 +16,12 @@ Promise.all([
     And the Spirit of God moved upon the face of the waters. Jesus`),
   db.invertedIndex('entity:3', 'entity', 'nasty'),
   db.invertedIndex('entity:4', 'entity', 'bad man'),
-  db.put('entity:4', '{ doc }')
+  db.put('entity:4', '{ doc4 }'),
+  db.put('entity:3', '{ doc3 }'),
+  db.put('entity:2', '{ doc2 }'),
+  db.put('entity:1', '{ doc1 }'),
 ]).then(async () => 
-  console.log(await db.search(['bad', 'man'], 'entity')))
+  console.log(await db.search(['forms'], 'entity')))
 
 /*
 // consider composite indexes e.g,
