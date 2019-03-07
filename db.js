@@ -7,7 +7,6 @@ const db = inverted(mvcc(view(ttl(level('/tmp/db-test', {
   valueEncoding: 'utf8' 
 })))));
 
-/*
 Promise.all([
   db.invertedIndex('entity:1', 'entity', `
     And the earth was without form, and void; and darkness was upon the face of the deep. 
@@ -15,10 +14,11 @@ Promise.all([
   db.invertedIndex('entity:2', 'entity', `
     And the earth was without form, and void; and darkness was upon the face of the deep. 
     And the Spirit of God moved upon the face of the waters. Jesus`),
-]).then(() => 
-  db.search('Jesus', 'entity')
-    .on('data', console.log))
-*/
+  db.invertedIndex('entity:3', 'entity', 'nasty'),
+  db.invertedIndex('entity:4', 'entity', 'bad man'),
+  db.put('entity:4', '{ doc }')
+]).then(async () => 
+  console.log(await db.search(['bad', 'man'], 'entity')))
 
 /*
 // consider composite indexes e.g,
