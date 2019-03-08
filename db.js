@@ -1,9 +1,9 @@
-const _ = require('lodash');
 const level = require('level');
 const ttl = require('./ttl');
 const mvcc = require('./mvcc');
 const view = require('./view');
 const inverted = require('./inverted');
+const orm = require('./orm');
 const db = inverted(mvcc(view(ttl(level('/tmp/db-test', {
   valueEncoding: 'utf8' 
 })))));
@@ -25,77 +25,14 @@ Promise.all([
 ]).then(async () => 
   console.log(await db.search('god void', 'entity')))
 */
-// we can know when to delete old versions based on read timestamps and open transactions
+// VACUUMING: we can know when to delete old versions based on read timestamps and open transactions, e.g who is reading a version?
 // consider support for materialized path indexing, ie
 // when a path hierarchy is changed all docs need to be updated to reflect that change
 // also what about searching under a given category/materialised path/partition?
 // consider composite indexes e.g,
 // long:55.00092 lat:30:38393 => 55.00092:30.38393
-function extendSchema(c, schema) {
-  return c ? extendSchema(
-    Object.getPrototypeOf(c), 
-    _.merge({}, c.schema, schema)
-  ) : schema;
-}
-
-function diffSchema(previous, current) {
-  
-}
-
-class Entity {
-  static getSchema() {
-    return extendSchema(this, {});
-  }
-}
-Entity.schema = {
-  fields: {}
-};
-
-class User extends Entity {}
-User.schema = {
-  fields: {
-    user: { $index: true }
-  }
-};
-
-class SuperUser extends User {}
-SuperUser.schema = {
-  fields: {
-    superUser: { $index: true }
-  }
-};
-
-SuperUser.map = class {
-  static allWithAUser(k, v, emit) {
-    emit(k, v);
-  }
-  static allWithAName(k, v, emit) {
-    emit(k, v);
-  }
-}
-
-SuperUser.reduce = class {
-  static allWithAUser(k, v, emit) {
-    emit(k, v);
-  }
-  static allWithAName(k, v, emit) {
-    emit(k, v);
-  }
-}
-
-//console.log(new SuperUser());
-console.log(SuperUser.getSchema());
 
 /*
-const model = new Entity('User')
-model.ttl() // enable ttl for this entity
-model.uniqueIndex('name');
-model.index('name');
-model.compoundIndex('long', 'lat');
-model.hasOne('address', 'Address');
-model.uniqueIndex('address');
-model.hasMany('friends', 'Friend');
-model.invertedIndex('bio');
 
 model.mapReduce('myMappedIndex', function (e, emit) {
   emit('index.count', e);
