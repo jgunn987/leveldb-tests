@@ -1,3 +1,4 @@
+const _ = require('lodash');
 const level = require('level');
 const ttl = require('./ttl');
 const mvcc = require('./mvcc');
@@ -33,8 +34,12 @@ Promise.all([
 function extendSchema(c, schema) {
   return c ? extendSchema(
     Object.getPrototypeOf(c), 
-    Object.assign({}, c.schema, schema)
+    _.merge({}, c.schema, schema)
   ) : schema;
+}
+
+function diffSchema(previous, current) {
+  
 }
 
 class Entity {
@@ -42,16 +47,41 @@ class Entity {
     return extendSchema(this, {});
   }
 }
-Entity.schema = {};
+Entity.schema = {
+  fields: {}
+};
 
 class User extends Entity {}
 User.schema = {
-  user: 1
+  fields: {
+    user: { $index: true }
+  }
 };
+
 class SuperUser extends User {}
 SuperUser.schema = {
-  superUser: 1
+  fields: {
+    superUser: { $index: true }
+  }
 };
+
+SuperUser.map = class {
+  static allWithAUser(k, v, emit) {
+    emit(k, v);
+  }
+  static allWithAName(k, v, emit) {
+    emit(k, v);
+  }
+}
+
+SuperUser.reduce = class {
+  static allWithAUser(k, v, emit) {
+    emit(k, v);
+  }
+  static allWithAName(k, v, emit) {
+    emit(k, v);
+  }
+}
 
 //console.log(new SuperUser());
 console.log(SuperUser.getSchema());
