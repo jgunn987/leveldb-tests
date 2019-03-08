@@ -7,6 +7,7 @@ const db = inverted(mvcc(view(ttl(level('/tmp/db-test', {
   valueEncoding: 'utf8' 
 })))));
 
+/*
 Promise.all([
   db.invertedIndex('entity:1', 'entity', `
     And the earth was without form, and void; and darkness was upon the face of the deep. 
@@ -21,12 +22,43 @@ Promise.all([
   db.put('entity:2', '{ doc2 }'),
   db.put('entity:1', '{ doc1 }'),
 ]).then(async () => 
-  console.log(await db.search(['forms'], 'entity')))
-
-/*
+  console.log(await db.search('god void', 'entity')))
+*/
+// we can know when to delete old versions based on read timestamps and open transactions
+// consider support for materialized path indexing, ie
+// when a path hierarchy is changed all docs need to be updated to reflect that change
+// also what about searching under a given category/materialised path/partition?
 // consider composite indexes e.g,
 // long:55.00092 lat:30:38393 => 55.00092:30.38393
+function extendSchema(c, schema) {
+  return c ? extendSchema(
+    Object.getPrototypeOf(c), 
+    Object.assign({}, c.schema, schema)
+  ) : schema;
+}
+
+class Entity {
+  static getSchema() {
+    return extendSchema(this, {});
+  }
+}
+Entity.schema = {};
+
+class User extends Entity {}
+User.schema = {
+  user: 1
+};
+class SuperUser extends User {}
+SuperUser.schema = {
+  superUser: 1
+};
+
+//console.log(new SuperUser());
+console.log(SuperUser.getSchema());
+
+/*
 const model = new Entity('User')
+model.ttl() // enable ttl for this entity
 model.uniqueIndex('name');
 model.index('name');
 model.compoundIndex('long', 'lat');
