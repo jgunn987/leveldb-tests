@@ -146,30 +146,3 @@ db1.batch()
   .write().then(() => db1.createReadStream({ gte: '$:', lt: '$:head' })
     .on('data', (data) => console.log(data.key, Number(data.key.replace('$:', '')))));
 
-let views = [];
-
-function view(id, start, end, fn) {
-  views = views.filter((v) => v.id !== id);
-  return views.push({ id, start, end, fn });
-}
-
-function match(key, start, end) {
-  return key >= start && key <= end;
-}
-
-function trigger(key, value) {
-  views.filter((view) => match(key, view.start, view.end))
-    .map((view) => view.fn(key, value, (k, v) => 
-      console.log('comitting ' + k)));
-}
-
-view('view1', 'key2', 'key4', 
-  (k, v, emit) => emit(k, v));
-view('view2', 'key1', 'key10', 
-  (k, v, emit) => emit(k, v));
-
-trigger('key4', 'value4');
-trigger('key10', 'value10');
-trigger('key100', 'value100');
-
-console.log(transactionId(9));

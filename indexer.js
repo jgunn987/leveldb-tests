@@ -1,16 +1,16 @@
 
-function dropIndex(schema, field) {
-  // scan all 'doc:k=v' and delete
-}
-
-function createIndex(schema, field) {
- // scan all doc and call indexField
-}
-
 function indexDocument(schema, p, c) {
   return Object.keys(schema.fields).map((name) =>
     schema.fields[name].$index === true ?
       index(schema, name, p, c) : []);
+}
+
+function drop(schema, field) {
+  // scan all 'doc:k=v' and delete
+}
+
+function create(schema, field) {
+ // scan all doc and call indexField
 }
 
 function index(schema, field, p, c) {
@@ -31,7 +31,16 @@ const schema = {
   table: 'Entity',
   fields: {
     name: { $index: true },
-    age: { $index: true }
+    age: { $index: true },
+    sub: { 
+      $schema: {
+        table: 'Comments',
+        fields: {
+          user: { $index: true },
+          text: { $index: true }
+        }
+      }
+    }
   }
 };
 const a = { name: 'Jim', age: 23 };
