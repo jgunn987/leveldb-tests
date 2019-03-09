@@ -70,18 +70,27 @@ model.hasMany('friends', 'Friend'); // what if entity has 1000 friends? are the 
                                     // sets or lists updates follow the format { $add: [...], $remove: [...] }
 
 
-Key space layout
+key space layout
 ================
 
-### Documents
+document tables
 
-type           | template
----------------|------------------------------------------------------------------
-latest version | %TableName/latest:{doc.uuid} => {document}
-versions log   | %TableName/{doc.wts}{doc.txid}:{doc.uuid} => {document}
-unique index   | %TableName.{field.name}:{field.value} => @{doc.uuid}
-index          | %TableName.{field.name}:{field.value}:{doc.uuid} => @{doc.uuid}
-inverted index | %TableName.{field.name}:{token}:{doc.uuid} => @{doc.uuid}
+type             | template
+-----------------|------------------------------------------------------------------
+count            | %{table.name}/count => {int}
+latest schema    | %{table.name}/schema/latest => {schema}
+schema versions  | %{table.name}/schema/{schema.txid} => {schema}
+latest version   | %{table.name}/latest:{doc.uuid} => {document}
+versions log     | %{table.name}/{doc.txid}:{doc.uuid} => {document}
+unique indexes   | %{table.name}.{field.name}:{field.value} => @{doc.uuid}
+index            | %{table.name}.{field.name}:{field.value}:{doc.uuid} => @{doc.uuid}
+inverted indexes | %{table.name}.{field.name}:{token}:{doc.uuid} => @{doc.uuid}
+compound indexes | %{table.name}.[{field1.name}:{field1.value}, {field2.name}:{field2.value}, ...]:{doc.uuid} => @{doc.uuid}
+has one          | %{table.name}.{field.name}:{doc.uuid} => @{doc.uuid}
+has many         | %{table.name}.{field.name}:{field.value} => @{doc.uuid}
+
+
+
 
 
 
