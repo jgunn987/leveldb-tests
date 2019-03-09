@@ -1,0 +1,30 @@
+const bytewise = require('bytewise');
+const db = require('level')('/tmp/bytewise-db');
+
+Promise.all([
+  db.put(bytewise.encode(1), '1'),
+  db.put(bytewise.encode(2), '2'),
+  db.put(bytewise.encode(3), '3'),
+  db.put(bytewise.encode(4), '4'),
+  db.put(bytewise.encode(5), '5'),
+  db.put(bytewise.encode(6), '6'),
+  db.put(bytewise.encode(7), '7'),
+  db.put(bytewise.encode(8), '8'),
+  db.put(bytewise.encode(9), '9'),
+  db.put(bytewise.encode(10), '10'),
+  db.put(bytewise.encode(11), '11'),
+  db.put(bytewise.encode(12), '12'),
+  db.put(bytewise.encode(13), '13'),
+  db.put(bytewise.encode(14), '14'),
+  db.put(bytewise.encode(15), '15'),
+  db.put(bytewise.encode([15, 0, 1]), '15 0 1'),
+  db.put(bytewise.encode([15, 2, 1]), '15 2 1'),
+  db.put(bytewise.encode([15, 'foo', 1]), '15 foo 1'),
+  db.put(bytewise.encode([15, 1, 1]), '15 1 1'),
+  db.put(bytewise.encode([15, 3, 1]), '15 3 1'),
+  db.put(bytewise.encode([15, 20, 0]), '15 20 0'),
+  db.put(bytewise.encode([15, 20, 1]), '15 20 1'),
+  db.put(bytewise.encode([15, 20, 2]), '15 20 2'),
+  db.put(bytewise.encode([15, 20, 'foor']), '15 20 foo'),
+  db.put(bytewise.encode([15, 20, 'bar']), '15 20 bar'),
+]).then(() => db.createReadStream().on('data', console.log));
