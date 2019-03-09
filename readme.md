@@ -32,18 +32,6 @@ long:55.00092 lat:30:38393 => 55.00092:30.38393
 // use ZFS for reliability, other file systems are prone to corruption
 
 /*
-const model = new Entity('User')
-model.ttl() // enable ttl for this entity
-model.cascade('comments', 'delete')
-model.uniqueIndex('name');
-model.index('name');
-model.compoundIndex('long', 'lat');
-model.hasOne('address', 'Address');
-model.uniqueIndex('address');
-model.invertedIndex('bio');
-model.hasMany('friends', 'Friend'); // what if entity has 1000 friends? are the pointers all stored in document??
-                                    // there must be and add/remove function on this level
-                                    // sets or lists updates follow the format { $add: [...], $remove: [...] }
 // take out the in memory implementations of redis
 // take out the leveldb or rocks db good parts for durability
 // create c extensions for certain plugins or indexers
@@ -61,7 +49,7 @@ model.ttl() // enable ttl for this entity
 model.cascade('comments', 'delete')
 model.uniqueIndex('name');
 model.index('name');
-model.compoundIndex('long', 'lat');
+model.compoundIndex('long', 'lat'); // these should be created for multiple AND's.
 model.hasOne('address', 'Address');
 model.uniqueIndex('address');
 model.invertedIndex('bio');
@@ -75,19 +63,21 @@ key space layout
 
 document tables
 
-type             | template
------------------|------------------------------------------------------------------
-count            | %{table.name}/count => {int}
-latest schema    | %{table.name}/schema/latest => {schema}
-schema versions  | %{table.name}/schema/{schema.txid} => {schema}
-latest version   | %{table.name}/latest:{doc.uuid} => {document}
-versions log     | %{table.name}/{doc.txid}:{doc.uuid} => {document}
-unique indexes   | %{table.name}.{field.name}:{field.value} => @{doc.uuid}
-index            | %{table.name}.{field.name}:{field.value}:{doc.uuid} => @{doc.uuid}
-inverted indexes | %{table.name}.{field.name}:{token}:{doc.uuid} => @{doc.uuid}
-compound indexes | %{table.name}.[{field1.name}:{field1.value}, {field2.name}:{field2.value}, ...]:{doc.uuid} => @{doc.uuid}
-has one          | %{table.name}.{field.name}:{doc.uuid} => @{doc.uuid}
-has many         | %{table.name}.{field.name}:{field.value} => @{doc.uuid}
+type                 | template | sql
+---------------------|----------|-------------------------------------------------------|
+count                | %{table.name}/$count => {int} | select count() from table
+latest schema        | %{table.name}/$schema/latest => {schema} | 
+schema versions      | %{table.name}/$schema/{schema.txid} => {schema} | 
+latest version       | %{table.name}/$latest:{doc.uuid} => {document} |select * from table where id = uuid
+versions log         | %{table.name}/$v:{doc.txid}:{doc.uuid} => {document} | select * from table where version = vid
+unique indexes       | %{table.name}/{field.name}:{field.value} => @{doc.uuid} | select * from table where field = value
+index                | %{table.name}/{field.name}:{field.value}:{doc.uuid} => @{doc.uuid} | select * from table where field = value
+inverted indexes     | %{table.name}/{field.name}:{token}:{doc.uuid} => @{doc.uuid} | select * from table where field contains(value)
+compound indexes     | %{table.name}/[{field1.name}:{field1.value};{field2.name}:{field2.value},...]:{doc.uuid} => @{doc.uuid} | select * from table where field1=value1 and field2=value2
+has one              | %{table.name}/{field.name}:{rel.uuid} => @{rel.uuid} | select * from table where field = value
+has one sub indexes  | %{table.name}/{hasOneField.name}/{index template}:{doc.uuid} => @{rel.uuid} | select * from table where hasOne.
+has many             | %{table.name}/{field.name}:{rel.uuid} => @{rel.uuid}
+has many sub-indexes | %{table.name}/{hasManyField.name}/{index template}:{doc.uuid} => @{rel.uuid}
 
 
 

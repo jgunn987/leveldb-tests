@@ -35,6 +35,7 @@ const query1 = {
       { in: ['array', [1, 2, 3]] }, //scan gte 'array=1' and lte 'array=1',
                                     //scan gte 'array=2' and lte 'array=2',
                                     //scan gte 'array=3' and lte 'array=3',
+      { nin: ['array', [1, 2, 3]] }, 
       { match: ['regexp', '.*'] } //scan all where 'regexp=.*'
     ]
   },
