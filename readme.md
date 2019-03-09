@@ -31,19 +31,6 @@ long:55.00092 lat:30:38393 => 55.00092:30.38393
 // create a database contains an intersection of all db types and optimizations for each, e.g roles such as search based, graph, relational, kv, cache
 // use ZFS for reliability, other file systems are prone to corruption
 
-/*
-// take out the in memory implementations of redis
-// take out the leveldb or rocks db good parts for durability
-// create c extensions for certain plugins or indexers
-// use or fork node to act as the server/networking component of the db
-// add optional indexing for specific query options, i.e. full scan, index, index at certian points etc
-// extensible schemas e.g CREATE TABLE User EXTENDS SuperUser
-// optional storage of unindexed data eg json with a keyword e.g NO_EXTRA
-// built in security/user module, RBAC ABAC modules
-// create a database contains an intersection of all db types and optimizations for each, e.g roles such as search based, graph, relational, kv, cache
-// use ZFS for reliability, other file systems are prone to corruption
-
-/*
 const model = new Entity('User')
 model.ttl() // enable ttl for this entity
 model.cascade('comments', 'delete')
@@ -63,20 +50,22 @@ key space layout
 
 document tables
 
-type                 | template | sql
----------------------|----------|-------------------------------------------------------|
-count                | %{table.name}/$count => {int} | select count() from table
-latest schema        | %{table.name}/$schema/latest => {schema} | 
-schema versions      | %{table.name}/$schema/{schema.txid} => {schema} | 
-latest version       | %{table.name}/$latest:{doc.uuid} => {document} |select * from table where id = uuid
-versions log         | %{table.name}/$v:{doc.txid}:{doc.uuid} => {document} | select * from table where version = vid
-unique indexes       | %{table.name}/{field.name}:{field.value} => @{doc.uuid} | select * from table where field = value
-index                | %{table.name}/{field.name}:{field.value}:{doc.uuid} => @{doc.uuid} | select * from table where field = value
-inverted indexes     | %{table.name}/{field.name}:{token}:{doc.uuid} => @{doc.uuid} | select * from table where field contains(value)
-compound indexes     | %{table.name}/[{field1.name}:{field1.value};{field2.name}:{field2.value},...]:{doc.uuid} => @{doc.uuid} | select * from table where field1=value1 and field2=value2
-has one              | %{table.name}/{field.name}:{rel.uuid} => @{rel.uuid} | select * from table where field = value
-has one sub indexes  | %{table.name}/{hasOneField.name}/{index template}:{doc.uuid} => @{rel.uuid} | select * from table where hasOne.
+type                 | template 
+---------------------|-----------------------------------------------------------------
+count                | %{table.name}/$count => {int} 
+latest schema        | %{table.name}/$schema/latest => {schema}
+schema versions      | %{table.name}/$schema/{schema.txid} => {schema}
+latest version       | %{table.name}/$latest:{doc.uuid} => {document}
+versions log         | %{table.name}/$v:{doc.txid}:{doc.uuid} => {document}
+unique indexes       | %{table.name}/{field.name}:{field.value} => @{doc.uuid}
+index                | %{table.name}/{field.name}:{field.value}:{doc.uuid} => @{doc.uuid}
+inverted indexes     | %{table.name}/{field.name}:{token}:{doc.uuid} => @{doc.uuid}
+compound indexes     | %{table.name}/[{field1.name}:{field1.value};{field2.name}:{field2.value},...]:{doc.uuid} => @{doc.uuid}
+has one              | %{table.name}/{field.name}:{rel.uuid}:{doc.uuid} => @{rel.uuid}
+has one unique       | %{table.name}/{field.name}:{rel.uuid}:{doc.uuid} => @{rel.uuid}
+has one sub indexes  | %{table.name}/{hasOneField.name}/{index template}:{doc.uuid} => @{rel.uuid}
 has many             | %{table.name}/{field.name}:{rel.uuid} => @{rel.uuid}
+has many unique      | %{table.name}/{field.name}:{rel.uuid} => @{rel.uuid}
 has many sub-indexes | %{table.name}/{hasManyField.name}/{index template}:{doc.uuid} => @{rel.uuid}
 
 
