@@ -74,8 +74,9 @@ Key space layout
 ================
 
 ### Documents
+
 type           | template
-----------------------------------------------------------------------------------
+---------------|------------------------------------------------------------------
 latest version | %TableName/latest:{doc.uuid} => {document}
 versions log   | %TableName/{doc.wts}{doc.txid}:{doc.uuid} => {document}
 unique index   | %TableName.{field.name}:{field.value} => @{doc.uuid}
