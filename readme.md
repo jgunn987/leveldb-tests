@@ -13,7 +13,6 @@ Security, Authentication, Authorization, Policies, RBAC ABAC
 Migrations
 TTL
 
-
 VACUUMING: we can know when to delete old versions based on read timestamps and open transactions, e.g who is reading a version?
 consider support for materialized path indexing, ie
 when a path hierarchy is changed all docs need to be updated to reflect that change
@@ -69,3 +68,24 @@ model.invertedIndex('bio');
 model.hasMany('friends', 'Friend'); // what if entity has 1000 friends? are the pointers all stored in document??
                                     // there must be and add/remove function on this level
                                     // sets or lists updates follow the format { $add: [...], $remove: [...] }
+
+
+Key space layout
+================
+
+### Documents
+type           | template
+----------------------------------------------------------------------------------
+latest version | %TableName/latest:{doc.uuid} => {document}
+versions log   | %TableName/{doc.wts}{doc.txid}:{doc.uuid} => {document}
+unique index   | %TableName.{field.name}:{field.value} => @{doc.uuid}
+index          | %TableName.{field.name}:{field.value}:{doc.uuid} => @{doc.uuid}
+inverted index | %TableName.{field.name}:{token}:{doc.uuid} => @{doc.uuid}
+
+
+
+
+
+
+
+
