@@ -17,6 +17,7 @@
     "deep-diff": "^1.0.2",
     "esprima": "^4.0.1",
     "level": "^4.0.0",
+    "level-geospatial": "0.0.5",
     "level-indico": "^0.3.1",
     "level-secondary": "^1.1.1",
     "level-sublevel": "^6.6.5",

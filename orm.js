@@ -18,6 +18,24 @@ repository.search('Post', post => {
   })
 });
 */
+
+function testQuery() {
+  return query('Entity')
+    .where((q) => {
+      return q.or([
+        q.eq('name', 'james'),
+        q.eq('name', 'jame'),
+        q.eq('name', 'jam'),
+        q.eq('name', 'ja'),
+        q.eq('name', 'j'),
+        q.gt('age', 25)
+      ]);
+    }).distinct()
+    .order('name', 'desc')
+    .offset(10)
+    .limit(100);
+}
+
 const query1 = {
   table: 'Entity',
   count: true,
@@ -43,8 +61,7 @@ const query1 = {
   order: ['age', 'asc'],
   offset: 10,
   limit: 10
-}
-
+};
 
 function extendSchema(c, schema) {
   return c ? extendSchema(
@@ -78,52 +95,44 @@ class Entity {
   }
 }
 Entity.schema = {
-  fields: {}
+  fields: {},
+  indexes: {}
 };
 
 class User extends Entity {}
 User.schema = {
   fields: {
-    user: { $index: true }
-    // unique indexes
-    // regular indexes
-    // compound indexes
-    // inverted indexes
-    // hasOne
-    // hadMany
-    // embedded schemas
-    // materialized paths
-    // manyToMany
-    // table name
-    // cascade delete
-    // allow disallow extra unindexed fields, JSON
+    user: { type: true }
+  }
+  // unique indexes
+  // regular indexes
+  // compound indexes
+  // inverted indexes
+  // hasOne
+  // hadMany
+  // embedded schemas
+  // materialized paths
+  // manyToMany
+  // table name
+  // cascade delete
+  // allow disallow extra unindexed fields, JSON
+  retainUndeclared: false,
+  indexes: {
+    name: { type: 'default', field: 'name' },
+    geloc: { type: 'compound', fields: ['long', 'lat'] },
+    sub: { type: 'default', field: 'address.country' },
+    uniq: { type: 'unique', field: 'email' },
+    search: { type: 'inverted', fields: ['bio', 'description'] }
+    one: { type: 'unique', field: 'owner' },
   }
 };
 
 class SuperUser extends User {}
 SuperUser.schema = {
   fields: {
-    superUser: { $index: true }
+    superUser: { type: true }
   }
 };
-
-SuperUser.map = class {
-  static allWithAUser(k, v, emit) {
-    emit(k, v);
-  }
-  static allWithAName(k, v, emit) {
-    emit(k, v);
-  }
-}
-
-SuperUser.reduce = class {
-  static allWithAUser(k, v, emit) {
-    emit(k, v);
-  }
-  static allWithAName(k, v, emit) {
-    emit(k, v);
-  }
-}
 
 console.log(SuperUser.getSchema());
 console.log(diffSchema( 

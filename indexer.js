@@ -32,15 +32,6 @@ const schema = {
   fields: {
     name: { $index: true },
     age: { $index: true },
-    sub: { 
-      $schema: {
-        table: 'Comments',
-        fields: {
-          user: { $index: true },
-          text: { $index: true }
-        }
-      }
-    }
   }
 };
 const a = { name: 'Jim', age: 23 };
