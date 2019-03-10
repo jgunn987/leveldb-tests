@@ -5,6 +5,7 @@ Document Versioning
 Transactions, MVCC
 Views
 Counts, indexes, unique constraints
+Bitmap indexes
 Atomic operations
 Geospatial indexing
 Time window indexing

@@ -9,6 +9,17 @@ const db = inverted(mvcc(view(ttl(level('/tmp/db-test', {
   valueEncoding: 'utf8' 
 })))));
 
+// metadata
+// - init metadata
+// - put metadata
+// - get metadata
+
+// log
+// - load log
+// - put log
+// - get log
+
+
 /*
 Promise.all([
   db.invertedIndex('entity:1', 'entity', `
