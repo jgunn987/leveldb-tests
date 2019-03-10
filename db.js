@@ -15,35 +15,34 @@ class DB {
   }
 
   async init() {
-    this.metadata = await this.loadMetadata();
-    this.schemas = await this.loadSchemas();
+    this.loadMetadata().loadSchemas();
   }
   
   async loadMetadata() {
     try {
-      return JSON.parse(await this.db.get('#metadata'));
+      this.metadata = JSON.parse(await this.db.get('#metadata'));
     } catch (err) {
-      const metadata = {
+      this.metadata = {
         tables: []
       };
 
       console.log('metadata not found, creating');
-      await this.db.put('#metadata', 
-        JSON.stringify(metadata));
-      return metadata;
+      await this.db.put('#metadata', JSON.stringify(this.metadata));
+      return this;
     }
   }
 
   async loadSchemas() {
     this.schemas = this.schemas || {};
     await Promise.all(this.metadata.tables.map(this.loadSchema));
-    return this.schemas;
+    return this;
   }
 
   async loadSchema(table) {
     try {
-      return this.schemas[table] = 
+      this.schemas[table] = 
         JSON.parse(await this.db.get('%' + table + '/$schema/latest'));
+      return this;
     } catch (err) {
       throw new Error('schema not found for table ' + table);
     }
