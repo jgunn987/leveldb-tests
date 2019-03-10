@@ -3,54 +3,11 @@ const ttl = require('./ttl');
 const mvcc = require('./mvcc');
 const view = require('./view');
 const inverted = require('./inverted');
+const keys = require('./keys');
 //const orm = require('./orm');
 const db = inverted(mvcc(view(ttl(level('/tmp/db-test', {
   valueEncoding: 'utf8' 
 })))));
-
-
-class DB {
-  constructor(db) {
-    this.db = db;
-  }
-
-  async init() {
-    this.loadMetadata().loadSchemas();
-  }
-  
-  async loadMetadata() {
-    try {
-      this.metadata = JSON.parse(await this.db.get('#metadata'));
-    } catch (err) {
-      this.metadata = {
-        tables: []
-      };
-
-      console.log('metadata not found, creating');
-      await this.db.put('#metadata', JSON.stringify(this.metadata));
-      return this;
-    }
-  }
-
-  async loadSchemas() {
-    this.schemas = this.schemas || {};
-    await Promise.all(this.metadata.tables.map(this.loadSchema));
-    return this;
-  }
-
-  async loadSchema(table) {
-    try {
-      this.schemas[table] = 
-        JSON.parse(await this.db.get('%' + table + '/$schema/latest'));
-      return this;
-    } catch (err) {
-      throw new Error('schema not found for table ' + table);
-    }
-  }
-}
-
-const dbm = new DB(db);
-dbm.init();
 
 /*
 Promise.all([
