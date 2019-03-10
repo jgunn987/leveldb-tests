@@ -1,40 +1,70 @@
-
-function indexDocument(schema, p, c) {
-  return Object.keys(schema.fields).map((name) =>
-    schema.fields[name].$index === true ?
-      index(schema, name, p, c) : []);
+function dropIndex(db, table, index) {
+  return db.createReadStream({ 
+    gte: '%' + table + '/$i/' + index,
+    lt: '%' + table + '/$i/' + index + '~',
+    values: false,
+    keys: true
+  }).on('close', () => {})
+    .on('end', () => {})
+    .on('data', (key) => db.del(key));
 }
 
-function drop(schema, field) {
-  // scan all 'doc:k=v' and delete
+function createIndex(db, schema, index) {
+  return db.createReadStream({ 
+    gte: '%' + table + '/$latest',
+    lt: '%' + table + '/$latest~',
+    values: true,
+    keys: true
+  }).on('close', () => {})
+    .on('end', () => {})
+    .on('data', (data) => {
+      //get indexer
+      //run indexer directly
+    });
 }
 
-function create(schema, field) {
- // scan all doc and call indexField
+function indexDocument(db, schema, p, c) {
+  Object.keys(schema.indexes).map((index) => {
+    //get indexer
+    //run indexer directly
+  });
 }
 
-function index(schema, field, p, c) {
-  const options = schema.fields[field];
+function index(db, schema, index, p, c) {
   if(!p[field] && c[field]) {
-    return [['put', field + '=' + c[field]]];
+    return [['put', c[field]]];
   } else if(p[field] && !c[field]) {
-    return [['del', field + '=' + p[field]]];
+    return [['del', p[field]]];
   } else if (p[field] !== c[field]) {
-    return [['del', field + '=' + p[field]],
-            ['put', field + '=' + c[field]]];
+    return [['del', p[field]],
+            ['put', c[field]]];
   } else {
     return [];
   }
 }
 
-const schema = {
-  table: 'Entity',
-  fields: {
-    name: { $index: true },
-    age: { $index: true },
+class IndexManager {
+  constructor(db, schemas) {
+    this.db = db;
+    this.schemas = schemas;
+    this.indexers = {};
   }
-};
-const a = { name: 'Jim', age: 23 };
-const b = { name: 'James', age: 22 };
 
-console.log(indexDocument(schema, a, b));
+  addIndexer(type, fn) {
+    this.indexers[type] = fn;
+    return this;
+  }
+
+  createIndex() {}
+  indexDocument(doc) {}
+  dropIndex() {}
+}
+
+const level = require('level');
+const db = level('/tmp/index-db');
+const indexer = new IndexManager(db, 'Entity', {});
+indexer.addIndexer('default', index)
+  .addIndexer('compound', index)
+  .addIndexer('unique', index)
+  .addIndexer('inverted', index);
+

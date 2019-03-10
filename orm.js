@@ -1,36 +1,35 @@
 const { diff } = require('deep-diff');
 const _ = require('lodash');
-/*
-const repository = new Repository()
-repository.declare(User);
-repository.declare(Post);
-repository.declare(Comment);
 
-repository.declareQuery('postsInThePast', q =>
-  query.select('*').from('Post')
-    .where('date < NOW()'));
-
-repository.search('Post', post => {
-  post.comments().search('where contains i am', comment => {
-    console.log(comment.getText());
-    comment.getAuthor(author =>
-      console.log(author.getName()));
-  })
-});
-*/
-
-function testQuery() {
+function testAndQuery() {
   return query('Entity')
-    .where((q) => {
-      return q.or([
+    .where((q) => 
+      q.and([
         q.eq('name', 'james'),
         q.eq('name', 'jame'),
         q.eq('name', 'jam'),
         q.eq('name', 'ja'),
         q.eq('name', 'j'),
-        q.gt('age', 25)
-      ]);
-    }).distinct()
+        q.gt('age', 25) 
+      ]))
+    .distinct()
+    .order('name', 'desc')
+    .offset(10)
+    .limit(100);
+}
+
+function testOrQuery() {
+  return query('Entity')
+    .where((q) => 
+      q.or([
+        q.eq('name', 'james'),
+        q.eq('name', 'jame'),
+        q.eq('name', 'jam'),
+        q.eq('name', 'ja'),
+        q.eq('name', 'j'),
+        q.gt('age', 25) 
+      ]))
+    .distinct()
     .order('name', 'desc')
     .offset(10)
     .limit(100);
@@ -103,6 +102,7 @@ class User extends Entity {}
 User.schema = {
   fields: {
     user: { type: true }
+    comments: { type: 'Comment' }
   }
   // unique indexes
   // regular indexes
@@ -123,7 +123,8 @@ User.schema = {
     sub: { type: 'default', field: 'address.country' },
     uniq: { type: 'unique', field: 'email' },
     search: { type: 'inverted', fields: ['bio', 'description'] }
-    one: { type: 'unique', field: 'owner' },
+    one: { type: 'unique', field: 'owner', cascade: 'delete' },
+    many: { type: 'default', field: 'comments', cascade: 'delete' }
   }
 };
 

@@ -78,3 +78,12 @@ has one unique       | %{table.name}/$i/{index.name}:{rel.uuid} | @{doc.uuid}
 has many             | %{table.name}/$i/{index.name}:{rel.uuid}:{doc.uuid} | @{doc.uuid}
 has many unique      | %{table.name}/$i/{index.name}:{rel.uuid} | @{doc.uuid}
 
+// with inverted indexes we can cache queries, e.g %{table.name}/$q/{index.name}:"some sub string"
+
+
+query syntax
+======================
+
+select({entity.name})
+where(
+    
