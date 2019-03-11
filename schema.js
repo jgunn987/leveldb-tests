@@ -9,20 +9,37 @@
 // cascade delete
 // inverted index on stringified JSON 
 // allow disallow extra unindexed fields, JSON
+// range queries e.g. BETWEEN
 const schema = {
   name: 'Post',
   extends: 'Entity',
+  deleteOrphan: true,
   indexes: {
     name: { type: 'default', fields: 'name' },
     geloc: { type: 'compound', fields: ['long', 'lat'] },
     sub: { type: 'default', fields: 'address.country' },
     uniq: { type: 'default', fields: 'email', unique: true },
     search: { type: 'inverted', fields: 'bio' },
-    // how do we foreign key based indexing???
-    // a compound index
-    one: { type: 'link', fields: 'owner', link: 'User', unique: true, indexes: [
-      'name', 'age', 'height', 'email'
-    ]},
-    many: { type: 'link', fields: 'comments', link: 'Comment', cascade: 'delete' }
+    one: { 
+      type: 'link', 
+      rel: 'author', 
+      object: 'User', 
+      indexes: [// must reference named indexes on User schema
+        'name', 
+        'age', 
+        'height', 
+        'email'
+      ]
+    },
+    many: { 
+      type: 'link', 
+      rel: 'comments', 
+      object: 'Comment', 
+      cascade: 'delete',
+      indexes: [
+        'date',
+        'content'
+      ]
+    }
   }
 };

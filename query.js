@@ -1,3 +1,4 @@
+// range queries e.g. BETWEEN
 function testJoinQuery() {
   return query('Entity')
     .where((q) => 

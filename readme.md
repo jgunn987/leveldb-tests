@@ -74,17 +74,16 @@ default index        | %{table.name}/$i/{index.name}:{value}:{doc.uuid} | @{doc.
 unique indexes       | %{table.name}/$i/{index.name}:{value} | @{doc.uuid}
 inverted indexes     | %{table.name}/$i/{index.name}:{token}:{doc.uuid} | @{doc.uuid}
 compound indexes     | %{table.name}/$i/{index.name}:{value1};{value2};{...}:{doc.uuid} | @{doc.uuid}
-has one              | %{table.name}/$i/{index.name}:{rel.uuid}:{doc.uuid} | @{doc.uuid}
-has one unique       | %{table.name}/$i/{index.name}:{rel.uuid} | @{doc.uuid}
-has many             | %{table.name}/$i/{index.name}:{rel.uuid}:{doc.uuid} | @{doc.uuid}
-has many unique      | %{table.name}/$i/{index.name}:{rel.uuid} | @{doc.uuid}
 
-// with inverted indexes we can cache queries, e.g %{table.name}/$q/{index.name}:"some sub string"
+links
+
+      $l/ops/{object.uuid}-{predicate}-{subject.uuid} => {subject.uuid, object.uuid} | 
+      $l/osp/{object.uuid}-{subject.uuid}-{predicate} => {subject.uuid, object.uuid} |
+      $l/pos/{predicate}-{object.uuid}-{subject.uuid} => {subject.uuid, object.uuid} |
+      $l/pso/{predicate}-{subject.uuid}-{object.uuid} => {subject.uuid, object.uuid} |
+      $l/sop/{subject.uuid}-{object.uuid}-{predicate} => {subject.uuid, object.uuid} | 
+      $l/spo/{subject.uuid}-{predicate}-{object.uuid} => {subject.uuid, object.uuid} |  
+
+      
 
 
-query syntax
-======================
-
-select({entity.name})
-where(
-    
