@@ -1,3 +1,27 @@
+function testJoinQuery() {
+  return query('Entity')
+    .where((q) => 
+      q.and([
+        q.eq('name', 'james'),
+        q.eq('name', 'jame'),
+        q.eq('name', 'jam'),
+        q.eq('name', 'ja'),
+        q.eq('name', 'j'),
+        q.gt('age', 25) 
+      ]))
+    .project('comments', (q) =>
+      q.where((q) => 
+        q.ed('author', 'james'))
+      .distinct()
+      .order('author', 'desc')
+      .offset(10)
+      .limit(100))
+    .distinct()
+    .order('name', 'desc')
+    .offset(10)
+    .limit(100);
+
+}
 function testAndQuery() {
   return query('Entity')
     .where((q) => 

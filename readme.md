@@ -43,7 +43,7 @@ model.uniqueIndex('address');
 model.invertedIndex('bio');
 model.hasMany('friends', 'Friend'); // what if entity has 1000 friends? are the pointers all stored in document??
                                     // there must be and add/remove function on this level
-                                    // sets or lists updates follow the format { $add: [...], $remove: [...] }
+                                    // sets or lists updates follow the format { $put: [...], $del: [...] }
 
 key space layout
 ================

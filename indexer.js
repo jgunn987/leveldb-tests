@@ -29,7 +29,8 @@ function indexDocument(db, schema, p, c) {
     //run indexer directly
   });
 }
-
+// this function needs the previous and current documents schemas
+// to accurately create and drop indexes
 function index(db, schema, index, p, c) {
   if(!p[field] && c[field]) {
     return [['put', c[field]]];

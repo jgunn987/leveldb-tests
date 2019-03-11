@@ -4,24 +4,25 @@
 // inverted indexes
 // hasOne
 // hadMany
-// embedded schemas
-// materialized paths
 // manyToMany
 // table name
 // cascade delete
-// 
+// inverted index on stringified JSON 
 // allow disallow extra unindexed fields, JSON
 const schema = {
   name: 'Post',
   extends: 'Entity',
-  retainUndefined: true, // keep extra fields
   indexes: {
-    name: { fields: 'name' },
-    geloc: { fields: ['long', 'lat'] },
-    sub: { fields: 'address.country' },
-    uniq: { fields: 'email', unique: true },
-    search: { fields: ['bio', 'description'], inverted: true },
-    one: { fields: 'owner', link: 'User', unique: true },
-    many: { fields: 'comments', link: 'Comment', cascade: 'delete' }
+    name: { type: 'default', fields: 'name' },
+    geloc: { type: 'compound', fields: ['long', 'lat'] },
+    sub: { type: 'default', fields: 'address.country' },
+    uniq: { type: 'default', fields: 'email', unique: true },
+    search: { type: 'inverted', fields: 'bio' },
+    // how do we foreign key based indexing???
+    // a compound index
+    one: { type: 'link', fields: 'owner', link: 'User', unique: true, indexes: [
+      'name', 'age', 'height', 'email'
+    ]},
+    many: { type: 'link', fields: 'comments', link: 'Comment', cascade: 'delete' }
   }
 };
