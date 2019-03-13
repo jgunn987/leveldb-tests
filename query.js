@@ -1,3 +1,17 @@
+function testOrQuery() {
+  return query('Entity')
+    .where((q) => 
+      q.or([
+        q.eq('name', 'james'),
+        q.eq('name', 'jame'),
+        q.eq('name', 'jam'),
+        q.eq('name', 'ja'),
+        q.eq('name', 'j'),
+        q.gt('age', 25) 
+        q.between('loc', '12.3458', '114.4489')
+      ])));
+}
+
 // range queries e.g. BETWEEN
 function testJoinQuery() {
   return query('Entity')
@@ -9,6 +23,7 @@ function testJoinQuery() {
         q.eq('name', 'ja'),
         q.eq('name', 'j'),
         q.gt('age', 25) 
+        q.between('loc', '12.3458', '114.4489')
       ]))
     .project('comments', (q) =>
       q.where((q) => 

@@ -32,15 +32,7 @@ long:55.00092 lat:30:38393 => 55.00092:30.38393
 // create a database contains an intersection of all db types and optimizations for each, e.g roles such as search based, graph, relational, kv, cache
 // use ZFS for reliability, other file systems are prone to corruption
 
-const model = new Entity('User')
-model.ttl() // enable ttl for this entity
-model.cascade('comments', 'delete')
-model.uniqueIndex('name');
-model.index('name');
 model.compoundIndex('long', 'lat'); // these should be created for multiple AND's.
-model.hasOne('address', 'Address');
-model.uniqueIndex('address');
-model.invertedIndex('bio');
 model.hasMany('friends', 'Friend'); // what if entity has 1000 friends? are the pointers all stored in document??
                                     // there must be and add/remove function on this level
                                     // sets or lists updates follow the format { $put: [...], $del: [...] }
@@ -70,20 +62,17 @@ latest schema        | %{table.name}/$schema/latest | {schema}
 schema versions      | %{table.name}/$schema:{schema.txid} | {schema}
 latest version       | %{table.name}/$latest:{doc.uuid} | {doc}
 versions log         | %{table.name}/$v/{doc.txid}:{doc.uuid} | {doc}
-default index        | %{table.name}/$i/{index.name}:{value}:{doc.uuid} | @{doc.uuid}
-unique indexes       | %{table.name}/$i/{index.name}:{value} | @{doc.uuid}
-inverted indexes     | %{table.name}/$i/{index.name}:{token}:{doc.uuid} | @{doc.uuid}
-compound indexes     | %{table.name}/$i/{index.name}:{value1};{value2};{...}:{doc.uuid} | @{doc.uuid}
+default index        | %{table.name}/$i/{index.name}:{field.name}={field.value}:{doc.uuid} | @{doc.uuid}
+unique indexes       | %{table.name}/$i/{index.name}:{field.name}={field.value} | @{doc.uuid}
+inverted indexes     | %{table.name}/$i/{index.name}:{field.name}={token}:{doc.uuid} | @{doc.uuid}
+compound indexes     | %{table.name}/$i/{index.name}:{field1.name}={field1.value}&{field2.name}={field2.value}&{...}:{doc.uuid} | @{doc.uuid}
+links                | %{table.name}/$@/{subject.uuid}:{subject.predicate}/$i/{index.name}:{field.name}{field.value}:{doc.uuid} | @{doc.uuid}
 
-links
-
-      $l/ops/{object.uuid}-{predicate}-{subject.uuid} => {subject.uuid, object.uuid} | 
-      $l/osp/{object.uuid}-{subject.uuid}-{predicate} => {subject.uuid, object.uuid} |
-      $l/pos/{predicate}-{object.uuid}-{subject.uuid} => {subject.uuid, object.uuid} |
-      $l/pso/{predicate}-{subject.uuid}-{object.uuid} => {subject.uuid, object.uuid} |
-      $l/sop/{subject.uuid}-{object.uuid}-{predicate} => {subject.uuid, object.uuid} | 
-      $l/spo/{subject.uuid}-{predicate}-{object.uuid} => {subject.uuid, object.uuid} |  
-
-      
-
+graph links
+$l/sop/{subject.uuid}-{object.uuid}-{predicate} => {spo} |
+$l/spo/{subject.uuid}-{predicate}-{object.uuid} => {spo} |
+$l/pso/{predicate}-{subject.uuid}-{object.uuid} => {spo} |
+$l/pos/{predicate}-{object.uuid}-{subject.uuid} => {spo} |
+$l/ops/{object.uuid}-{predicate}-{subject.uuid} => {spo} | 
+$l/osp/{object.uuid}-{subject.uuid}-{predicate} => {spo} |
 

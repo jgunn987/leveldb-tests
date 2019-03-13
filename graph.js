@@ -2,7 +2,7 @@ const level = require('level');
 const levelgraph = require('levelgraph');
 const db = levelgraph(xdb = level('/tmp/graph-db'));
 
-var triple = { subject: "a", predicate: "b", object: "c", "someStuff": 42 };
+var triple = { subject: "z", predicate: "b", object: "c", "someStuff": 42 };
 db.put(triple, function() {
   db.get({ subject: "a" }, function(err, list) {
     console.log(list);
