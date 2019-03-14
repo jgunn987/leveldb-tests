@@ -45,7 +45,7 @@ class Indexer {
         const options = schema.indexes[name];
         const indexer = this.indexers[options.type];
         return indexer(this.db, schema, name, options, doc);
-      })).then(_.flatten)
+      })).then(_.flattenDeep)
         .then((indices) => 
           indices.map((index) => ({ 
             type: 'put', key: index, value: doc._id 

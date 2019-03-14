@@ -1,5 +1,7 @@
 const _ = require('lodash');
+const jmespath = require('jmespath');
 const natural = require('natural');
+const keys = require('./keys');
 const tokenizer = /[\W\d]+/;
 
 function tokenize(text) {
@@ -9,32 +11,13 @@ function tokenize(text) {
     .filter(Boolean));
 }
 
-function searchTerm(db, term, channel) {
-  return new Promise((resolve, reject) => {
-    const results = [];
-    db.createReadStream({ 
-      gte: '%' + channel + ':' + term, 
-      lt: '%' + channel + ':' + term + '~' 
-    }).on('error', reject)
-      .on('end', () => resolve(results))
-      .on('close', () => resolve(results))
-      .on('data', data => results.push(data.value));
+module.exports.index = (db, schema, name, options, doc) =>
+  options.fields.map((field) => {
+    let text = jmespath.search(doc, field);
+    if(typeof text !== 'string') {
+      text = JSON.stringify(text);
+    }
+
+    return tokenize(text).map((term) =>
+      keys.index(schema.name, name, term, doc._id));
   });
-}
-
-function intersection(sets) {
-  return sets.map(set => _.uniq(set)).
-    reduce((p, c) => c.filter(entry => p.indexOf(entry) !== -1));
-}
-
-module.exports = db => {
-  db.invertedIndex = (key, channel, text) =>
-    db.batch(tokenize(text).map(token =>
-      ({ type: 'put', key: '%' + channel + ':' + token + ':' + key, value: key })));
-
-  db.search = (terms, channel) => 
-    Promise.all(tokenize(terms).map(term => searchTerm(db, term, channel)))
-      .then(results => Promise.all(intersection(results).map((key) => db.get(key))));
-
-  return db;
-};

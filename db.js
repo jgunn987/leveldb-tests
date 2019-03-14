@@ -3,7 +3,6 @@ const ttl = require('./ttl');
 const mvcc = require('./mvcc');
 const view = require('./view');
 const inverted = require('./inverted');
-const keys = require('./keys');
 //const orm = require('./orm');
 const db = inverted(mvcc(view(ttl(level('/tmp/db-test', {
   valueEncoding: 'utf8' 
@@ -21,27 +20,30 @@ module.exports = function (level) {
 
   const db = new DB(level);
 
-  db.schema.put(schema1, true)
+  db.schemaManager
+    .put(schema1, true)
     .put(schema2, true)
     .put(schema3, true)
     .put(schema4, true)
     .put(schema5, true);
 
-  db.indexer.use('default', _default.index)
+  db.indexer
+    .use('default', _default.index)
     .use('inverted', inverted.index)
     .use('geo', geo.index)
     .use('link', link.index);
 
-  db.engine.use('gt', query.docGt, query.indexGt)
-    .use('gte', query.docGte, query.indexGte)
-    .use('lt', query.docLt, query.indexLt)
-    .use('lte', query.docLte, query.indexLte)
-    .use('eq', query.docEq, query.indexEq)
-    .use('neq', query.docNeq, query.indexNeq)
-    .use('within', query.docWithin, query.indexWithin)
-    .use('without', query.docWithout, query.indexWithout)
-    .use('match', query.docMatch)
-    .use('search', query.docSearch, query.indexSearch);
+  db.queryEngine
+    .filter('gt', query.docGt, query.indexGt)
+    .filter('gte', query.docGte, query.indexGte)
+    .filter('lt', query.docLt, query.indexLt)
+    .filter('lte', query.docLte, query.indexLte)
+    .filter('eq', query.docEq, query.indexEq)
+    .filter('neq', query.docNeq, query.indexNeq)
+    .filter('within', query.docWithin, query.indexWithin)
+    .filter('without', query.docWithout, query.indexWithout)
+    .filter('match', query.docMatch)
+    .filter('search', query.docSearch, query.indexSearch);
 
   return db;
 };

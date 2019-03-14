@@ -26,4 +26,4 @@ module.exports.indexBase = (table, indexName) =>
   `%${table}/$i/${indexName}`;
 
 module.exports.index = (table, indexName, value, uuid) =>
-  `%${table}/$i/${indexName}:${value}:${uuid}`;
+  `%${table}/$i/${indexName}:${value}` + (uuid ? ':' + uuid : '');
