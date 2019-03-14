@@ -12,12 +12,12 @@ class Indexer {
     return this;
   }
 
-  drop(schema, index) {
+  drop(schema, name) {
     return new Promise((resolve, reject) => {
       let ops = [];
       this.db.createKeyStream({ 
-        gte: keys.indexBase(schema.name, index),
-        lt: keys.indexBase(schema.name, index) + '~'
+        gte: keys.indexBase(schema.name, name),
+        lt: keys.indexBase(schema.name, name) + '~'
       }).on('error', reject)
         .on('end', () => resolve(ops))
         .on('data', (key) => 
@@ -25,7 +25,7 @@ class Indexer {
     });
   }
   
-  create(schema, index) {
+  create(schema, name) {
     return new Promise((resolve, reject) => {
       let ops = [];
       this.db.createReadStream({ 
@@ -34,7 +34,11 @@ class Indexer {
       }).on('error', reject)
         .on('end', () => resolve(ops))
         .on('data', async (data) => {
-          ops.push(...this.index(schema, JSON.parse(data.value)));
+          const doc = JSON.parse(data.value);
+          const options = schema.indexes[name];
+          const indexer = this.indexers[options.type];
+          if(!indexer) throw new Error('Unknown index type');
+          return indexer(this.db, schema, name, options, doc);
         });
     });
   }
@@ -44,6 +48,7 @@ class Indexer {
       .map((name) => {
         const options = schema.indexes[name];
         const indexer = this.indexers[options.type];
+        if(!indexer) throw new Error('Unknown index type');
         return indexer(this.db, schema, name, options, doc);
       })).then(_.flattenDeep)
         .then((indices) => 

@@ -1,52 +1,144 @@
 const level = require('level');
-const ttl = require('./ttl');
-const mvcc = require('./mvcc');
-const view = require('./view');
-const inverted = require('./inverted');
-//const orm = require('./orm');
-const db = inverted(mvcc(view(ttl(level('/tmp/db-test', {
-  valueEncoding: 'utf8' 
-})))));
+const _ = require('lodash');
+const keys = require('./keys');
+const Indexer = require('./indexer');
+const Schema = require('./schema');
 
 class DB {
-  constructor() {
+  constructor(db) {
+    this.db = db;
+    this.indexer = new Indexer(db);
     this.schemas = {};
-    this.filters = {};
-    this.indexers = {};
+  }
+
+  async init() {
+    await this.loadMetadata();
+    await this.loadSchemas();
+    return this;
+  }
+
+  async loadMetadata() {
+    const key = keys.metadata();
+    try {
+      const metadata = await this.db.get(key);
+      this.metadata = JSON.parse(metadata);
+    } catch(err) {
+      console.log('Could not find system metadata, initializing new');
+      this.metadata = { tables: [] };
+      await this.db.put(key, JSON.stringify(this.metadata));
+    }
+    return this;
+  }
+
+  async loadSchemas() {
+    return Promise.all(this.metadata.tables.map(async (table) => {
+      try {
+        const key = keys.schemaLatest(table);
+        const schema = await this.db.get(key);
+        this.schemas[table] = JSON.parse(schema);
+      } catch (err) {
+        console.log(`Could not find schema for table "${table}"`);
+      }
+    }));
+  }
+
+  async putSchema(schema) {
+    const name = schema.name;
+    const existing = this.schemas[name];
+
+    if(existing) {
+      console.log(`Performing migration on table '${name}'`);
+      const ops = await this.migrateSchema(existing, schema);
+      await this.db.batch(ops);
+      console.log(`Migration complete on table '${name}'`);
+    } else {
+      console.log(`Creating new table '${name}'`);
+      const ops = await this.createNewTable(schema);
+      await this.db.batch(ops);
+      console.log(`Table '${name}' created`);
+    }
+  }
+
+  async migrateSchema(p, c) {
+    const schemaOps = Schema.diff(p, c);
+    const batch = [];
+    const ops = await Promise.all(schemaOps.map(async (op) => {
+      if(op.type === 'create') {
+        const ops = await this.indexer.create(c, op.index);
+        batch.push(...ops);
+      } else if(op.type === 'drop') {
+        const ops = await this.indexer.drop(p, op.index);
+        batch.push(...ops);
+      }
+    }));
+
+    batch.push(...this.putNewSchemaVersion(c));
+    batch.push(...this.putMetadata());
+    return batch;
+  }
+
+  async createNewTable(schema) {
+    const name = schema.name;
+    this.schemas[name] = schema;
+    this.metadata.tables.push(name);
+    this.metadata.tables = 
+      _.uniq(this.metadata.tables);
+
+    const batch = [];
+    for(let name in schema.indexes) {
+      const ops = await this.indexer.create(schema, name);
+      batch.push(...ops);
+    }
+
+    batch.push(...this.putNewSchemaVersion(schema));
+    batch.push(...this.putMetadata());
+    return batch;
+  }
+
+  putNewSchemaVersion(schema) {
+    schema._v = '00001';
+    this.schemas[schema.name] = schema;
+    const str = JSON.stringify(schema);
+    return [{ 
+      type: 'put', key: keys.schemaLatest(schema.name), value: str 
+    }, {
+      type: 'put', key: keys.schema(schema.name, '000100'), value: str
+    }];
+  }
+
+  putMetadata() {
+    return [{ type: 'put', key: keys.metadata(), 
+      value: JSON.stringify(this.metadata) }];
   }
 }
 
-module.exports = function (level) {
-
-  const db = new DB(level);
-
-  db.schemaManager
-    .put(schema1, true)
-    .put(schema2, true)
-    .put(schema3, true)
-    .put(schema4, true)
-    .put(schema5, true);
-
-  db.indexer
-    .use('default', _default.index)
-    .use('inverted', inverted.index)
-    .use('geo', geo.index)
-    .use('link', link.index);
-
-  db.queryEngine
-    .filter('gt', query.docGt, query.indexGt)
-    .filter('gte', query.docGte, query.indexGte)
-    .filter('lt', query.docLt, query.indexLt)
-    .filter('lte', query.docLte, query.indexLte)
-    .filter('eq', query.docEq, query.indexEq)
-    .filter('neq', query.docNeq, query.indexNeq)
-    .filter('within', query.docWithin, query.indexWithin)
-    .filter('without', query.docWithout, query.indexWithout)
-    .filter('match', query.docMatch)
-    .filter('search', query.docSearch, query.indexSearch);
-
-  return db;
+const ddb = new DB(level('/tmp/ddb-test'));
+const schema1 = {
+  name: 'Post',
+  indexes: {
+    name: { type: 'default', fields: ['name'] },
+    title: { type: 'default', fields: ['title'], unique: true },
+  }
 };
+
+const schema2 = {
+  name: 'Post',
+  indexes: {
+    name: { type: 'default', fields: ['name'] },
+    age: { type: 'default', fields: ['age'] },
+    text: { type: 'inverted', fields: ['text'] },
+    compound: { type: 'default', fields: ['a.b', 'c.d'] }
+  }
+};
+
+ddb.init().then(async () => {
+  await ddb.putSchema(schema1);
+  await ddb.putSchema(schema2);
+  console.log(ddb.schemas);
+});
+
+
+module.exports = DB;
 
 // log
 // - load log

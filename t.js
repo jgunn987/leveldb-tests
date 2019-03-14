@@ -35,7 +35,8 @@ indexer.drop(schema1, 'name')
   .then(console.log);
 indexer.create(schema1, 'name')
   .then(console.log);
-indexer.index(schema1, { _id: 1, name: 'James', title: 'mr' })
+/*
+ indexer.index(schema1, { _id: 1, name: 'James', title: 'mr' })
   .then(console.log);
 indexer.index(schema2, { _id: 1, name: 'James', title: 'pleb', text: 'a b c'  })
   .then(console.log);
@@ -43,3 +44,4 @@ indexer.index(schema2, { _id: 1, name: 'James', title: 'pleb', text: { a: 'do' }
   .then(console.log);
 indexer.index(schema2, { _id: 1, name: 'James', title: 'pleb', a: { b: 1 }, c: { d: 2 } })
   .then(console.log);
+*/

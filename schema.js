@@ -9,7 +9,7 @@ class Schema {
       const ai = a.indexes[key];
       const bi = b.indexes[key];
       if(!bi || !_.isEqual(ai, bi)) {
-        ops.push({ type: 'drop', key: keys.indexBase(a.name, key) });
+        ops.push({ type: 'drop', table: a.name, index: key });
       }
     }
 
@@ -17,7 +17,7 @@ class Schema {
       const ai = a.indexes[key];
       const bi = b.indexes[key];
       if(!ai || !_.isEqual(ai, bi)) {
-        ops.push({ type: 'create', key: keys.indexBase(a.name, key) });
+        ops.push({ type: 'create', table: a.name, index: key });
       }
     }
     return ops;
