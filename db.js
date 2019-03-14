@@ -1,6 +1,9 @@
 const level = require('level');
 const _ = require('lodash');
+const uuid = require('uuid');
 const keys = require('./keys');
+const defaults = require('./defaults');
+const inverted = require('./inverted');
 const Indexer = require('./indexer');
 const Schema = require('./schema');
 
@@ -96,9 +99,31 @@ class DB {
     return [{ type: 'put', key: keys.metadata(), 
       value: JSON.stringify(this.metadata) }];
   }
+
+  async putDocument(table, doc) {
+    if(this.metadata.tables.indexOf(table) === -1) {
+      throw new Error(`Unknown table '${table}'`);
+    }
+
+    const schema = this.schemas[table];
+    if(!schema) {
+      throw new Error(`No schema registered for table '${table}'`);
+    }
+
+    if(!doc._id) {
+      doc = Object.assign(doc, { _id: uuid.v4() });
+    }
+    doc = Object.assign(doc, { _v: '00001' });
+
+    const json = JSON.stringify(doc);
+    const ops = await this.indexer.index(schema, doc);
+    ops.push({ type: 'put', key: keys.docLatest(table, doc._id), value: json });
+    ops.push({ type: 'put', key: keys.document(table, doc._id, doc._v), value: json });
+    return this.db.batch(ops);
+  }
 }
 
-const ddb = new DB(level('/tmp/ddb-test'));
+const db = new DB(level('/tmp/ddb-test'));
 const schema1 = {
   name: 'Post',
   indexes: {
@@ -117,10 +142,16 @@ const schema2 = {
   }
 };
 
-ddb.init().then(async () => {
-  await ddb.putSchema(schema1);
-  await ddb.putSchema(schema2);
-  console.log(ddb.schemas);
+db.init().then(async () => {
+  db.indexer.use('default', defaults.index);
+  db.indexer.use('inverted', inverted.index);
+  await db.putSchema(schema1);
+  await db.putSchema(schema2);
+  await db.putDocument('Post', {
+    title: 'mr',
+    name: 'James'
+  });
+  db.db.createReadStream().on('data', console.log);
 });
 
 
