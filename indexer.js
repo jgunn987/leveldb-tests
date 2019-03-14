@@ -44,28 +44,3 @@ function index(db, schema, index, p, c) {
   }
 }
 
-class IndexManager {
-  constructor(db, schemas) {
-    this.db = db;
-    this.schemas = schemas;
-    this.indexers = {};
-  }
-
-  addIndexer(type, fn) {
-    this.indexers[type] = fn;
-    return this;
-  }
-
-  createIndex() {}
-  indexDocument(doc) {}
-  dropIndex() {}
-}
-
-const level = require('level');
-const db = level('/tmp/index-db');
-const indexer = new IndexManager(db, 'Entity', {});
-indexer.addIndexer('default', index)
-  .addIndexer('compound', index)
-  .addIndexer('unique', index)
-  .addIndexer('inverted', index);
-

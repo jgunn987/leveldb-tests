@@ -19,5 +19,5 @@ module.exports.documentLatest = (table, uuid) =>
 module.exports.document = (table, uuid, version) =>
   `%${table}/$v/${version}:${uuid}`;
 
-module.exports.index = (table, indexName) =>
-  `%${table}/$i/${indexName}`;
+module.exports.index = (table, indexName, value) =>
+  `%${table}/$i/${indexName}:${value}`;

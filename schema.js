@@ -15,11 +15,12 @@ const schema = {
   extends: 'Entity',
   deleteOrphan: true,
   indexes: {
-    name: { type: 'default', fields: 'name' },
-    geloc: { type: 'compound', fields: ['long', 'lat'] },
-    sub: { type: 'default', fields: 'address.country' },
-    uniq: { type: 'default', fields: 'email', unique: true },
-    search: { type: 'inverted', fields: 'bio' },
+    name: { type: 'default', fields: ['name'] },
+    geloc: { type: 'geo', fields: ['long', 'lat'] },
+    compound: { type: 'default', fields: ['a.b', 'c.d.e'] },
+    sub: { type: 'default', fields: ['address.country'] },
+    uniq: { type: 'default', fields: ['email'], unique: true },
+    search: { type: 'inverted', fields: ['bio'] },
     one: { 
       type: 'link', 
       rel: 'author', 

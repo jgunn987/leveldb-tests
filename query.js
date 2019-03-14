@@ -1,3 +1,4 @@
+// *if the query is on a primary key scan the whole db
 // *if within and AND chain, if one or more filters has an index
 //  start with these indexes, then fetch the matched documents and
 //  run all the other filters that dont have an index against matched documents
@@ -6,32 +7,32 @@
 const level = require('level');
 const db = level('/tmp/query-db');
 const mergeStream = require('merge-stream'); 
+const keys = require('./keys');
+const jmespath = require('jmespath');
 
-// set intersection
-function queryDocumentAnd(db, doc, filters) {
+function index(db, schema, name, options, doc) {
+  return Promise.resolve(
+    keys.index(schema.table, name,
+      options.fields.map((field) =>
+        jmespath.search(doc, field)).join('&'))]);
 }
 
-// set union
-function queryDocumentOr(db, doc, filters) {
-
-}
-
-function queryDocumentEq(db, doc, field, value) {
+function docEq(db, doc, field, value) {
   return Promise.resolve(doc[field] === value);
 }
 
-function queryIndexEq(db, index, value) {
+function indexEq(db, index, value) {
   return db.createReadStream({
     gte: index + ':' + value,
     lte: index + ':' + value + '~'
   });
 }
 
-function queryDocumentNeq(db, doc, field, value) {
+function docNeq(db, doc, field, value) {
   return Promise.resolve(doc[field] !== value);
 }
 
-function queryIndexNeq(db, index, value) {
+function indexNeq(db, index, value) {
   return mergeStream(db.createReadStream({
     gt: index + ':',
     lt: index + ':' + value
@@ -41,47 +42,81 @@ function queryIndexNeq(db, index, value) {
   }));
 }
 
-function queryDocumentGt(db, doc, field, value) {
+function docGt(db, doc, field, value) {
   return Promise.resolve(doc[field] > value);
 }
 
-function queryIndexGt(db, index, value) {
+function indexGt(db, index, value) {
   return db.createReadStream({ gt: index + ':' + value });
 }
 
-function queryDocumentGte(db, doc, field, value) {
+function docGte(db, doc, field, value) {
   return Promise.resolve(doc[field] >= value);
 }
 
-function queryIndexGte(db, index, value) {
+function indexGte(db, index, value) {
   return db.createReadStream({ gte: index + ':' + value });
 }
 
-function queryDocumentLt(db, doc, field, value) {
+function docLt(db, doc, field, value) {
   return Promise.resolve(doc[field] < value);
 }
 
-function queryIndexLt(db, index, value) {
+function indexLt(db, index, value) {
   return db.createReadStream({ lt: index + ':' + value });
 }
 
-function queryDocumentLte(db, doc, field, value) {
+function docLte(db, doc, field, value) {
   return Promise.resolve(doc[field] <= value);
 }
 
-function queryIndexLte(db, index, value) {
+function indexLte(db, index, value) {
   return db.createReadStream({ lte: index + ':' + value });
 }
-
 // value must be a RegExp object
-function queryDocumentMatch(db, doc, field, value) {
+function docMatch(db, doc, field, value) {
   return Promise.resolve(value.test(doc[field]));
 }
 
-function queryDocumentSearch(db, doc, field, value) {
+function docSearch(db, doc, field, value) {
   // do a search on terms within the document field/s
 }
 
+// add a match all or match any option
+function indexSearch(db, index, values) {
+  return mergeStream(...values.split(' ').map((token) =>
+    db.createReadStream({
+      gte: index + ':' + token,
+      lte: index + ':' + token + '~'
+    })));
+}
+
+function docWithin(db, doc, field, start, end) {
+  const field = doc[field];
+  return Promise.resolve(field >= start && field <= end);
+}
+
+function indexWithin(db, index, start, end) {
+  return db.createReadStream({
+    gte: index + ':' + start,
+    lte: index + ':' + end
+  });
+}
+
+function docWithout(db, doc, field, start, end) {
+  const field = doc[field];
+  return Promise.resolve(field < start || field > end);
+}
+
+function indexWithout(db, index, start, end) {
+  return mergeStream(db.createReadStream({
+    gt: index + ':',
+    lt: index + ':' + start
+  }), db.createReadStream({
+    gt: index + ':' + end,
+    lt: index + ':~'
+  }));
+}
 
 
 function testOrQuery() {
@@ -94,7 +129,8 @@ function testOrQuery() {
         q.eq('name', 'ja'),
         q.eq('name', 'j'),
         q.gt('age', 25), 
-        q.between('loc', '12.3458', '114.4489'),
+        q.within('loc', '12.3458', '114.4489'),
+        q.without('loc', '12.3458', '114.4489'),
         q.match('email', '*@{1}.*'),
         q.intersection([ //AND
           q.eq('name', 'gam'),
@@ -102,9 +138,8 @@ function testOrQuery() {
           q.eq('name', 'g'),
         ])
       ]))
-    .project('comments', (q) =>
-        q('Comment')
-        .filter((q) => q.search('text', 'Cool Beans'))
+    .join('comments', 'Comment', (q) =>
+        q.filter((q) => q.search('text', 'Cool Beans'))
         .order('date', 'asc')
         .limit(100))
     .order('date', 'asc')

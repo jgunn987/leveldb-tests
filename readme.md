@@ -64,7 +64,7 @@ type                 | key template | value
 count                | %{table.name}/$count | {int} 
 latest schema        | %{table.name}/$schema/latest | {schema}
 schema versions      | %{table.name}/$schema:{schema.txid} | {schema}
-latest version       | %{table.name}/$latest:{doc.uuid} | {doc}
+latest version       | %{table.name}/$d/{doc.uuid} | {doc}
 versions log         | %{table.name}/$v/{doc.txid}:{doc.uuid} | {doc}
 default index        | %{table.name}/$i/{index.name}:{field.name}={field.value}:{doc.uuid} | @{doc.uuid}
 unique indexes       | %{table.name}/$i/{index.name}:{field.name}={field.value} | @{doc.uuid}

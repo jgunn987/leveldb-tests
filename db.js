@@ -9,15 +9,67 @@ const db = inverted(mvcc(view(ttl(level('/tmp/db-test', {
   valueEncoding: 'utf8' 
 })))));
 
-// metadata
-// - init metadata
-// - put metadata
-// - get metadata
+class DB {
+  constructor() {
+    this.schemas = {};
+    this.filters = {};
+    this.indexers = {};
+  }
+
+  putSchema(schema, migrate=false) {
+    this.schema[schema.table] = schema;
+    return this;
+  }
+
+  putIndexer(name, indexer) {
+    this.indexers[name] = indexer;
+    return this;
+  }
+
+  putQueryFilter(name, doc, index) {
+    this.filters[name] = { doc, index };
+    return this;
+  }
+}
+/*
+db.putSchema(schema1, true)
+  .putSchema(schema2, true)
+  .putSchema(schema3, true)
+  .putSchema(schema4, true)
+  .putSchema(schema5, true);
+
+db.delSchema(schema6, true);
+
+db.putIndexer('default', _default.index)
+  .putIndexer('inverted', inverted.index)
+  .putIndexer('geo', geo.index)
+  .putIndexer('link', link.index);
+
+db.putQueryFilter('gt', query.docGt, query.indexGt)
+  .putQueryFilter('gte', query.docGte, query.indexGte)
+  .putQueryFilter('lt', query.docLt, query.indexLt)
+  .putQueryFilter('lte', query.docLte, query.indexLte)
+  .putQueryFilter('eq', query.docEq, query.indexEq)
+  .putQueryFilter('neq', query.docNeq, query.indexNeq)
+  .putQueryFilter('within', query.docWithin, query.indexWithin)
+  .putQueryFilter('without', query.docWithout, query.indexWithout)
+  .putQueryFilter('match', query.docMatch)
+  .putQueryFilter('search', query.docSearch, query.indexSearch);
+*/
 
 // log
 // - load log
 // - put log
 // - get log
+// metadata
+// - init metadata
+// - put metadata
+// - get metadata
+// schema
+// - load schemas
+//
+// serve
+
 
 
 /*

@@ -16,6 +16,7 @@
     "bytewise": "^1.1.0",
     "deep-diff": "^1.0.2",
     "esprima": "^4.0.1",
+    "jmespath": "^0.15.0",
     "level": "^4.0.0",
     "level-geospatial": "0.0.5",
     "level-indico": "^0.3.1",
