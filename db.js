@@ -45,65 +45,51 @@ class DB {
   async putSchema(schema) {
     const name = schema.name;
     const existing = this.schemas[name];
+    const ops = [];
 
     if(existing) {
       console.log(`Performing migration on table '${name}'`);
-      const ops = await this.migrateSchema(existing, schema);
-      await this.db.batch(ops);
+      ops.push(...await this.migrateSchema(existing, schema));
       console.log(`Migration complete on table '${name}'`);
     } else {
       console.log(`Creating new table '${name}'`);
-      const ops = await this.createNewTable(schema);
-      await this.db.batch(ops);
+      ops.push(...await this.createNewTable(schema));
       console.log(`Table '${name}' created`);
     }
-  }
 
-  async migrateSchema(p, c) {
-    const schemaOps = Schema.diff(p, c);
-    const batch = [];
-    const ops = await Promise.all(schemaOps.map(async (op) => {
-      if(op.type === 'create') {
-        const ops = await this.indexer.create(c, op.index);
-        batch.push(...ops);
-      } else if(op.type === 'drop') {
-        const ops = await this.indexer.drop(p, op.index);
-        batch.push(...ops);
-      }
-    }));
-
-    batch.push(...this.putNewSchemaVersion(c));
-    batch.push(...this.putMetadata());
-    return batch;
-  }
-
-  async createNewTable(schema) {
-    const name = schema.name;
-    this.schemas[name] = schema;
+    ops.push(...this.putNewSchemaVersion(schema));
+    this.schemas[schema.name] = schema;
     this.metadata.tables.push(name);
     this.metadata.tables = 
       _.uniq(this.metadata.tables);
+    ops.push(...this.putMetadata());
+    await this.db.batch(ops);
+    return this;
+  }
 
-    const batch = [];
-    for(let name in schema.indexes) {
-      const ops = await this.indexer.create(schema, name);
-      batch.push(...ops);
-    }
+  async migrateSchema(p, c) {
+    return await Promise.all(Schema.diff(p, c).map(async (op) => {
+      if(op.type === 'create') {
+        return await this.indexer.create(c, op.index);
+      } else if(op.type === 'drop') {
+        return await this.indexer.drop(p, op.index);
+      }
+    })).then(_.flatten);
+  }
 
-    batch.push(...this.putNewSchemaVersion(schema));
-    batch.push(...this.putMetadata());
-    return batch;
+  async createNewTable(schema) {
+    return Promise.all(Object.keys(schema.indexes).map((name) =>
+      this.indexer.create(schema, name))).then(_.flatten);
   }
 
   putNewSchemaVersion(schema) {
     schema._v = '00001';
     this.schemas[schema.name] = schema;
     const str = JSON.stringify(schema);
-    return [{ 
-      type: 'put', key: keys.schemaLatest(schema.name), value: str 
-    }, {
-      type: 'put', key: keys.schema(schema.name, '000100'), value: str
-    }];
+    return [
+      { type: 'put', key: keys.schemaLatest(schema.name), value: str }, 
+      { type: 'put', key: keys.schema(schema.name, '000100'), value: str }
+    ];
   }
 
   putMetadata() {
