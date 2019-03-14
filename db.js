@@ -15,47 +15,36 @@ class DB {
     this.filters = {};
     this.indexers = {};
   }
-
-  putSchema(schema, migrate=false) {
-    this.schema[schema.table] = schema;
-    return this;
-  }
-
-  putIndexer(name, indexer) {
-    this.indexers[name] = indexer;
-    return this;
-  }
-
-  putQueryFilter(name, doc, index) {
-    this.filters[name] = { doc, index };
-    return this;
-  }
 }
-/*
-db.putSchema(schema1, true)
-  .putSchema(schema2, true)
-  .putSchema(schema3, true)
-  .putSchema(schema4, true)
-  .putSchema(schema5, true);
 
-db.delSchema(schema6, true);
+module.exports = function (level) {
 
-db.putIndexer('default', _default.index)
-  .putIndexer('inverted', inverted.index)
-  .putIndexer('geo', geo.index)
-  .putIndexer('link', link.index);
+  const db = new DB(level);
 
-db.putQueryFilter('gt', query.docGt, query.indexGt)
-  .putQueryFilter('gte', query.docGte, query.indexGte)
-  .putQueryFilter('lt', query.docLt, query.indexLt)
-  .putQueryFilter('lte', query.docLte, query.indexLte)
-  .putQueryFilter('eq', query.docEq, query.indexEq)
-  .putQueryFilter('neq', query.docNeq, query.indexNeq)
-  .putQueryFilter('within', query.docWithin, query.indexWithin)
-  .putQueryFilter('without', query.docWithout, query.indexWithout)
-  .putQueryFilter('match', query.docMatch)
-  .putQueryFilter('search', query.docSearch, query.indexSearch);
-*/
+  db.schema.put(schema1, true)
+    .put(schema2, true)
+    .put(schema3, true)
+    .put(schema4, true)
+    .put(schema5, true);
+
+  db.indexer.use('default', _default.index)
+    .use('inverted', inverted.index)
+    .use('geo', geo.index)
+    .use('link', link.index);
+
+  db.engine.use('gt', query.docGt, query.indexGt)
+    .use('gte', query.docGte, query.indexGte)
+    .use('lt', query.docLt, query.indexLt)
+    .use('lte', query.docLte, query.indexLte)
+    .use('eq', query.docEq, query.indexEq)
+    .use('neq', query.docNeq, query.indexNeq)
+    .use('within', query.docWithin, query.indexWithin)
+    .use('without', query.docWithout, query.indexWithout)
+    .use('match', query.docMatch)
+    .use('search', query.docSearch, query.indexSearch);
+
+  return db;
+};
 
 // log
 // - load log

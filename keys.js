@@ -13,11 +13,17 @@ module.exports.schemaLatest = (table) =>
 module.exports.schema = (table, version) =>
   `%${table}/$schema:${version}`;
 
-module.exports.documentLatest = (table, uuid) =>
+module.exports.docLatestBase = (table) =>
+  `%${table}/$latest`;
+
+module.exports.docLatest = (table, uuid) =>
   `%${table}/$latest:${uuid}`;
   
 module.exports.document = (table, uuid, version) =>
   `%${table}/$v/${version}:${uuid}`;
 
-module.exports.index = (table, indexName, value) =>
-  `%${table}/$i/${indexName}:${value}`;
+module.exports.indexBase = (table, indexName) =>
+  `%${table}/$i/${indexName}`;
+
+module.exports.index = (table, indexName, value, uuid) =>
+  `%${table}/$i/${indexName}:${value}:${uuid}`;

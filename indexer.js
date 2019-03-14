@@ -1,46 +1,56 @@
-function dropIndex(db, table, index) {
-  return db.createReadStream({ 
-    gte: '%' + table + '/$i/' + index,
-    lt: '%' + table + '/$i/' + index + '~',
-    values: false,
-    keys: true
-  }).on('close', () => {})
-    .on('end', () => {})
-    .on('data', (key) => db.del(key));
-}
+const keys = require('./keys');
+const _ = require('lodash');
 
-function createIndex(db, schema, index) {
-  return db.createReadStream({ 
-    gte: '%' + table + '/$latest',
-    lt: '%' + table + '/$latest~',
-    values: true,
-    keys: true
-  }).on('close', () => {})
-    .on('end', () => {})
-    .on('data', (data) => {
-      //get indexer
-      //run indexer directly
+class Indexer {
+  constructor(db) {
+    this.db = db;
+    this.indexers = {};
+  }
+  
+  use(name, indexer) {
+    this.indexers[name] = indexer;
+    return this;
+  }
+
+  drop(schema, index) {
+    return new Promise((resolve, reject) => {
+      let ops = [];
+      this.db.createKeyStream({ 
+        gte: keys.indexBase(schema.name, index),
+        lt: keys.indexBase(schema.name, index) + '~'
+      }).on('error', reject)
+        .on('end', () => resolve(ops))
+        .on('data', (key) => 
+          ops.push({ type: 'del', key }))
     });
-}
+  }
+  
+  create(schema, index) {
+    return new Promise((resolve, reject) => {
+      let ops = [];
+      this.db.createReadStream({ 
+        gte: keys.docLatestBase(schema.name),
+        lt: keys.docLatestBase(schema.name) + '~',
+      }).on('error', reject)
+        .on('end', () => resolve(ops))
+        .on('data', async (data) => {
+          ops.push(...this.index(schema, JSON.parse(data.value)));
+        });
+    });
+  }
 
-function indexDocument(db, schema, p, c) {
-  Object.keys(schema.indexes).map((index) => {
-    //get indexer
-    //run indexer directly
-  });
-}
-// this function needs the previous and current documents schemas
-// to accurately create and drop indexes
-function index(db, schema, index, p, c) {
-  if(!p[field] && c[field]) {
-    return [['put', c[field]]];
-  } else if(p[field] && !c[field]) {
-    return [['del', p[field]]];
-  } else if (p[field] !== c[field]) {
-    return [['del', p[field]],
-            ['put', c[field]]];
-  } else {
-    return [];
+  index(schema, doc) {
+    return Promise.all(Object.keys(schema.indexes)
+      .map((name) => {
+        const options = schema.indexes[name];
+        const indexer = this.indexers[options.type];
+        return indexer(this.db, schema, name, options, doc);
+      })).then(_.flatten)
+        .then((indices) => 
+          indices.map((index) => ({ 
+            type: 'put', key: index, value: doc._id 
+          })));
   }
 }
 
+module.exports = Indexer;

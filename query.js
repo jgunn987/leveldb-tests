@@ -10,13 +10,6 @@ const mergeStream = require('merge-stream');
 const keys = require('./keys');
 const jmespath = require('jmespath');
 
-function index(db, schema, name, options, doc) {
-  return Promise.resolve(
-    keys.index(schema.table, name,
-      options.fields.map((field) =>
-        jmespath.search(doc, field)).join('&'))]);
-}
-
 function docEq(db, doc, field, value) {
   return Promise.resolve(doc[field] === value);
 }
