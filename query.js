@@ -111,7 +111,6 @@ function indexWithout(db, index, start, end) {
   }));
 }
 
-
 function testOrQuery() {
   return query('Entity')
     .filter((q) => 
@@ -132,7 +131,14 @@ function testOrQuery() {
         ])
       ]))
     .project('comments', 'Comment', (q) =>
-        q.filter((q) => q.search('text', 'Cool Beans'))
+        q.filter((q) => 
+          q.intersection([
+            q.search('text', 'Cool Beans'),
+            q.lte('number', 1),
+            q.eq('name', 'gam'),
+            q.eq('name', 'ga'),
+            q.eq('name', 'g'),
+          ])
         .order('date', 'asc')
         .limit(100))
     .order('date', 'asc')
@@ -141,11 +147,19 @@ function testOrQuery() {
 
 {
   table: 'Entity',
-  filter: [{
-    $union: [
-      { $eq: { field: 'name', value: 'James' } }, 
-      { $eq: { field: 'name', value: 'James' } },
-      { $gt: { field: 'age', value: 25 } },
+  filter: {
+    type: 'intersection',
+    expressions: [
+      { type: 'eq', field: 'name', value: 'James' }, 
+      { type: 'gt', field: 'name', value: 'James' }, 
+      { type: 'lt', field: 'name', value: 'James' }, 
+      { type: 'match', field: 'name', value: '.*' },
+      { type: 'union', expressions: [{
+        { type: 'eq', field: 'name', value: 'James' }, 
+        { type: 'gt', field: 'name', value: 'James' }, 
+        { type: 'lt', field: 'name', value: 'James' }, 
+        { type: 'match', field: 'name', value: '.*' },
+      }] },
     ]
   }],
   projections: [{
@@ -160,6 +174,10 @@ function testOrQuery() {
       }]
     }
   }]
+  distinct: ['name', 'age'],
+  order: { fields: ['name', 'age'], dir: 'ASC' },
+  offset: 0,
+  limit: 100
 }
 
 /*

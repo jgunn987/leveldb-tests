@@ -12,6 +12,7 @@ class Indexer {
     return this;
   }
 
+  // drop one index
   drop(schema, name) {
     return new Promise((resolve, reject) => {
       let ops = [];
@@ -25,6 +26,7 @@ class Indexer {
     });
   }
   
+  // create one index
   create(schema, name) {
     return new Promise((resolve, reject) => {
       let ops = [];

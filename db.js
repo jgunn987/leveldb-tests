@@ -1,4 +1,3 @@
-const level = require('level');
 const _ = require('lodash');
 const uuid = require('uuid');
 const keys = require('./keys');
@@ -47,7 +46,7 @@ class DB {
     }
   }
 
-  async putSchema(schema) {
+  async migrate(schema) {
     const name = schema.name;
     const ops = [];
 
@@ -64,7 +63,6 @@ class DB {
     this.schemas[schema.name] = schema;
     this.metadata.tables.push(name);
     this.metadata.tables = _.uniq(this.metadata.tables);
-
     ops.push(...this.putNewSchemaVersion(schema), 
              ...this.putMetadata());
     
