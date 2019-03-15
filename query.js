@@ -131,13 +131,29 @@ function testOrQuery() {
           q.eq('name', 'g'),
         ])
       ]))
-    .join('comments', 'Comment', (q) =>
+    .project('comments', 'Comment', (q) =>
         q.filter((q) => q.search('text', 'Cool Beans'))
         .order('date', 'asc')
         .limit(100))
     .order('date', 'asc')
     .limit(100);
 }
+{
+  table: 'Entity',
+  filter: {
+    $union: [
+      { $eq: { field: 'name', value: 'James' } }, 
+      { $eq: { field: 'name', value: 'James' } },
+      { $gt: { field: 'age', value: 25 } },
+    ]
+  }
+  $project: {
+    field: 'comments',
+    table: 'Comment',
+    filter: {}
+  }
+}
+
 /*
 
 // range queries e.g. BETWEEN

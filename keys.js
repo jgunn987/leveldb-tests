@@ -19,7 +19,7 @@ module.exports.docLatestBase = (table) =>
 module.exports.docLatest = (table, uuid) =>
   `%${table}/$latest:${uuid}`;
   
-module.exports.document = (table, uuid, version) =>
+module.exports.doc = (table, uuid, version) =>
   `%${table}/$v/${version}:${uuid}`;
 
 module.exports.indexBase = (table, indexName) =>
