@@ -138,20 +138,28 @@ function testOrQuery() {
     .order('date', 'asc')
     .limit(100);
 }
+
 {
   table: 'Entity',
-  filter: {
+  filter: [{
     $union: [
       { $eq: { field: 'name', value: 'James' } }, 
       { $eq: { field: 'name', value: 'James' } },
       { $gt: { field: 'age', value: 25 } },
     ]
-  }
-  $project: {
+  }],
+  projections: [{
     field: 'comments',
-    table: 'Comment',
-    filter: {}
-  }
+    query: {
+      table: 'Comment',
+      filter: [],
+      projections: [{
+        field: 'authors',
+        table: 'User',
+        filter: []
+      }]
+    }
+  }]
 }
 
 /*
