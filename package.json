@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node t"
+    "test": "mocha test/index.js"
   },
   "keywords": [],
   "author": "",
@@ -32,5 +32,8 @@
     "newsapi": "^2.4.0",
     "uuid": "^3.3.2",
     "xtend": "^4.0.1"
+  },
+  "devDependencies": {
+    "mocha": "^6.0.2"
   }
 }
