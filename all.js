@@ -2,33 +2,45 @@ const assert = require('assert');
 const jmespath = require('jmespath');
 const uuid = require('uuid');
 const _ = require('lodash');
+const mergeStream = require('merge-stream');
 const { Transform } = require('stream');
-const keys = require('./keys');
 
-function docLatestBase(table) {
+function docLatestBaseKey(table) {
   return `%${table}/$latest`;
 }
   
-function indexBase(table, indexName) {
+function indexBaseKey(table, indexName) {
   return `%${table}/$i/${indexName}`;
+}
+
+function docLatestKey(table, uuid) {
+  return `%${table}/$latest:${uuid}`;
+}
+  
+function docKey(table, uuid, version) {
+  return `%${table}/$v/${version}:${uuid}`;
+}
+
+function indexKey(table, indexName, value, uuid) {
+  return `%${table}/$i/${indexName}:${value}` + (uuid ? ':' + uuid : '');
 }
 
 function scanAllDocuments(db, schema) {
   return db.createReadStream({ 
-    gte: docLatestBase(schema.name),
-    lt: docLatestBase(schema.name) + '~'
+    gte: docLatestBaseKey(schema.name),
+    lt: docLatestBaseKey(schema.name) + '~'
   });
 }
 
 function scanAllIndexKeys(db, schema, indexName) {
   return db.createKeyStream({ 
-    gte: indexBase(schema.name, indexName),
-    lt: indexBase(schema.name, indexName) + '~'
+    gte: indexBaseKey(schema.name, indexName),
+    lt: indexBaseKey(schema.name, indexName) + '~'
   });
 }
 
-function dropIndex(db, schema, index) {
-  return scanAllIndexKeys(db, schema, index)
+function dropIndex(db, schema, indexName) {
+  return scanAllIndexKeys(db, schema, indexName)
     .pipe(new Transform({
        transform(key, encoding, done) {
          return done(null, { type: 'del', key });
@@ -61,11 +73,24 @@ function invokeIndexer(db, schema, name, doc) {
     (db, schema, name, schema.indexes[name], doc);
 }
 
-function defaultIndexer(db, schema, name, options, doc) {
-  return [ keys.index(schema.name, name, 
+function defaultIndexerGenerateKey(schema, name, options, doc) {
+  return indexKey(schema.name, name, 
     options.fields.map((field) => 
       jmespath.search(doc, field) || 'NULL').join('&'), 
-    !options.unique && doc._id) ];
+    !options.unique && doc._id); 
+}
+
+async function defaultIndexer(db, schema, name, options, doc) {
+  const key = defaultIndexerGenerateKey(schema, name, options, doc);
+  if (options.unique) {
+    try { 
+      await db.get(key);
+    } catch(err) { 
+      return [key];
+    }
+    throw new Error(`Duplicate key on index ${name}`);
+  }
+  return [key];
 }
 
 function compareIndices(a, b, action) {
@@ -77,32 +102,69 @@ function compareIndices(a, b, action) {
   }).filter(o => o);
 }
 
-function diffSchema(a, b) {
-  return compareIndices(a, b, 'dropIndex')
-    .concat(compareIndices(b, a, 'createIndex'));
+function diffSchema(old, current) {
+  return compareIndices(old, current, 'dropIndex')
+    .concat(compareIndices(current, old, 'createIndex'));
 }
 
-function migrate(db, schema) {
-  diffSchema(
+function migrateSchema(db, p, c) {
+  const streams = mergeStream();
+  const diff = diffSchema(p, c);
+
+  let create = false;
+  diff.forEach((op) => {
+    op.type === 'dropIndex' ? 
+      streams.add(dropIndex(db, p, op.index)):
+      create = true;
+  });
+
+  if(create) {
+    streams.add(indexAllDocuments(db, c));
+  }
+  return streams;
 }
 
-function createDocument(db, source) {
-  return Object.assign({}, source, {
-    _id: source._id || uuid.v4(),
+async function putDocument(db, table, doc) {
+  const schema = db.schemas[table];
+  const newDoc = createDocument(db, doc);
+  const json = JSON.stringify(newDoc);
+  await db.batch([
+    ...await indexDocument(db, schema, newDoc), 
+    { type: 'put', key: docLatestKey(table, newDoc._id), value: json },
+    { type: 'put', key: docKey(table, newDoc._id, newDoc._v), value: json }
+  ]);
+  return newDoc._id;
+}
+
+async function getDocument(db, table, uuid, version) {
+  return JSON.parse(version ?
+    await db.get(docKey(table, uuid, version)):
+    await db.get(docLatestKey(table, uuid)));
+}
+
+function delDocument(db, table, uuid) {
+  return db.put(docLatestKey(table, uuid), '');
+}
+
+function createDocument(db, doc) {
+  return Object.assign({}, doc || {}, {
+    _id: doc._id || uuid.v4(),
     _v: (+new Date()).toString()
   });
 }
 
-const db = require('level')('/tmp/dddbbb');
+const db = require('level')('/tmp/test-db');
 db.indexers = {};
 db.indexers.default = defaultIndexer; 
-const userSchema = {
+db.schemas = {};
+db.schemas.User = {
   name: 'User',
   indexes: {
     name: { type: 'default', fields: ['name'] },
     email: { type: 'default', fields: ['email'], unique: true }
   }
 };
+
 const userSchema2 = {
   name: 'User',
   indexes: {
@@ -112,7 +174,7 @@ const userSchema2 = {
   }
 };
 
-const diff = diffSchema(userSchema, userSchema2);
+const diff = diffSchema(db.schemas.User, userSchema2);
 assert.ok(diff.length === 3);
 assert.ok(diff[0].type === 'dropIndex');
 assert.ok(diff[0].table === 'User');
@@ -128,7 +190,19 @@ const doc = createDocument(db, { title: 'Create' });
 assert.ok(doc._id);
 assert.ok(doc._v);
 
-indexDocument(db, userSchema, { _id: '1', name: 'James', email: 'jgunn987@gmail.com' })
+putDocument(db, 'User', { name: 'Jameson', email: 'jgunn987@gmail.com' })
+  .then(async (id) => {
+    const newDoc = await getDocument(db, 'User', id);
+    console.log(newDoc);
+    assert.ok(newDoc._id === id);
+    assert.ok(newDoc._v);
+    assert.ok(newDoc.name === 'Jameson');
+    assert.ok(newDoc.email === 'jgunn987@gmail.com');
+    const versionDoc = await getDocument(db, 'User', id, newDoc._v);
+    assert.ok(_.isEqual(newDoc, versionDoc));
+  });
+
+indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987@gmail.com' })
   .then((keys) => {
     assert.ok(keys.length === 2);
     assert.ok(keys[0].type === 'put');
