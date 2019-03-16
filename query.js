@@ -111,6 +111,24 @@ function indexWithout(db, index, start, end) {
   }));
 }
 
+function anotherQuery() {
+  query('Entity',
+    filter(union([
+      eq('name', 'james'),
+      eq('name', 'j'),
+      eq('name', 'a'),
+      eq('name', 'm'),
+      eq('name', 'e'),
+      eq('name', 's'),
+      intersection([
+        within('age', 20, 25),
+        without('weight', 10, 200)
+      ])
+    ])),
+    projection('comments', 'Comment,
+      filter(
+}
+
 function testOrQuery() {
   return query('Entity')
     .filter((q) => 

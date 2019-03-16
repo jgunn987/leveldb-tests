@@ -73,18 +73,21 @@ async function validateIndexOp(db, schema, doc, indexes) {
   return Promise.all((indexes || Object.keys(schema.indexes)).map(async (name) => { 
     if(schema.indexes[name].unique === true) {
       const keys = await invokeIndexer(db, schema, name, doc);
-      return Promise.all(keys.map(async (key) => {
-        let id;
-        try {
-          id = await db.get(key);
-        } catch (err) {
-          return true;
-        }
-        if(doc._id !== id)
-          throw new Error(`Duplicate key '${key}'`);
-      }));
+      return Promise.all(keys.map(async (key) => 
+        validateUniqueKey(db, key, doc)));
     }
   }));
+}
+
+async function validateUniqueKey(db, key, doc) {
+  let id;
+  try {
+    id = await db.get(key);
+  } catch (err) {
+    return true;
+  }
+  if(doc._id !== id)
+    throw new Error(`Duplicate key '${key}'`);
 }
 
 function generateIndexKeys(db, schema, doc, indexes = null) {
@@ -103,6 +106,10 @@ function defaultIndexer(db, schema, name, options, doc) {
     options.fields.map((field) => 
       jmespath.search(doc, field) || 'NULL').join('&'), 
     !options.unique && doc._id) ]; 
+}
+
+function linkIndexer(db, schema, name, options, doc) {
+  return defaultIndexer(...arguments);
 }
 
 function tokenize(text) {
@@ -125,15 +132,20 @@ function invertedIndexer(db, schema, name, options, doc) {
 
 function migrate(db, p, c) {
   return new Promise((resolve, reject) => {
-    const batch = db.batch();
+    const dropBatch = db.batch();
+    const createBatch = db.batch();
+    const end = async () => {
+      await dropBatch.write();
+      await createBatch.write();
+    };
     createMigrationStream(db, p, c)
-      .on('end', () => resolve(batch.write()))
-      .on('close', () => resolve(batch.write()))
+      .on('end', end)
+      .on('close', end)
       .on('data', (data) => {
         if(data.type === 'put') {
-          batch.put(data.key, data.value);
+          createBatch.put(data.key, data.value);
         } else if(data.type === 'del') {
-          batch.del(data.key);
+          dropBatch.del(data.key);
         }  
       });
   });
@@ -144,13 +156,10 @@ function createMigrationStream(db, p, c) {
   const diff = diffSchema(p, c);
   const create = [];
 
-  diff.forEach((op) => {
-    if(op.type === 'dropIndex') {
-      streams.add(dropIndex(db, p, op.index));
-    } else if(op.type === 'createIndex') {
-      create.push(op.index);
-    }
-  });
+  diff.forEach((op) =>
+    op.type === 'dropIndex' ?
+      streams.add(dropIndex(db, p, op.index)):
+      create.push(op.index));
 
   if(create.length) {
     streams.add(indexAllDocuments(db, c, create));
@@ -204,55 +213,15 @@ async function delDocument(db, table, uuid) {
     { type: 'put', key: docLatestKey(table, doc._id), value: 'null' }
   ]);
 }
-/*
-
-{
-  table: 'Entity',
-  filter: {
-    type: 'intersection',
-    expressions: [
-      { type: 'eq', field: 'name', value: 'James' }, 
-      { type: 'gt', field: 'name', value: 'James' }, 
-      { type: 'lt', field: 'name', value: 'James' }, 
-      { type: 'match', field: 'name', value: '.*' },
-      { type: 'union', expressions: [{
-        { type: 'eq', field: 'name', value: 'James' }, 
-        { type: 'gt', field: 'name', value: 'James' }, 
-        { type: 'lt', field: 'name', value: 'James' }, 
-        { type: 'match', field: 'name', value: '.*' },
-      }] },
-    ]
-  }],
-  projections: [{
-    field: 'comments',
-    query: {
-      table: 'Comment',
-      filter: [],
-      projections: [{
-        field: 'authors',
-        table: 'User',
-        filter: []
-      }]
-    }
-  }]
-  distinct: ['name', 'age'],
-  order: { fields: ['name', 'age'], dir: 'ASC' },
-  offset: 0,
-  limit: 100
-}
-*/
 function queryDocuments(db, query) {
   const result = parseFilter(db, query, query.filter);
   if(result.type === 'index') {
     // TODO
   } else {
     return scanAllDocuments(db, query.table)
-      .pipe(new Transform({
-        objectMode: true,
-        transform(data, enc, done) {
-          const doc = JSON.parse(data.value);
-          if(!doc) return done();
-        }
+      .pipe(transformer((data, enc, done) => {
+        const doc = JSON.parse(data.value);
+        if(!doc) return done();
       }));
   }
 }
@@ -292,10 +261,8 @@ function docEq(db, doc, field, value) {
 }
 
 function indexEq(db, index, value) {
-  return db.createReadStream({
-    gte: index + ':' + value + ':',
-    lte: index + ':' + value + '~'
-  });
+  const key = index + ':' + value;
+  return db.createReadStream({ gte: key + ':', lte: key + '~' });
 }
 
 function docNeq(db, doc, field, value) {
@@ -361,11 +328,9 @@ function docSearch(db, doc, field, value) {
 
 // add a match all or match any option
 function indexSearch(db, index, values) {
+  const key = index + ':';
   return mergeStream(...tokenize(values).map((token) =>
-    db.createReadStream({
-      gte: index + ':' + token,
-      lte: index + ':' + token
-    })));
+    db.createReadStream({ gte: key + token, lte: key+ token })));
 }
 
 function docWithin(db, doc, field, start, end) {
@@ -374,10 +339,8 @@ function docWithin(db, doc, field, start, end) {
 }
 
 function indexWithin(db, index, start, end) {
-  return db.createReadStream({
-    gte: index + ':' + start,
-    lte: index + ':' + end
-  });
+  const key = index + ':';
+  return db.createReadStream({ gte: key + start, lte: key + end });
 }
 
 function docWithout(db, doc, field, start, end) {
@@ -395,10 +358,47 @@ function indexWithout(db, index, start, end) {
   }));
 }
 
+/*
+{
+  table: 'Entity',
+  filter: {
+    type: 'intersection',
+    expressions: [
+      { type: 'eq', field: 'name', value: 'James' }, 
+      { type: 'gt', field: 'name', value: 'James' }, 
+      { type: 'lt', field: 'name', value: 'James' }, 
+      { type: 'match', field: 'name', value: '.*' },
+      { type: 'union', expressions: [{
+        { type: 'eq', field: 'name', value: 'James' }, 
+        { type: 'gt', field: 'name', value: 'James' }, 
+        { type: 'lt', field: 'name', value: 'James' }, 
+        { type: 'match', field: 'name', value: '.*' },
+      }] },
+    ]
+  }],
+  projections: [{
+    field: 'comments',
+    query: {
+      table: 'Comment',
+      filter: [],
+      projections: [{
+        field: 'authors',
+        table: 'User',
+        filter: []
+      }]
+    }
+  }]
+  distinct: ['name', 'age'],
+  order: { fields: ['name', 'age'], dir: 'ASC' },
+  offset: 0,
+  limit: 100
+}
+*/
 const db = require('level')('/tmp/test-db');
 db.indexers = {};
 db.indexers.default = defaultIndexer; 
 db.indexers.inverted = invertedIndexer; 
+db.indexers.link = linkIndexer; 
 db.filters = {};
 db.filters.gt = [docGt, indexGt];
 db.filters.gte = [docGte, indexGte];
@@ -416,7 +416,10 @@ db.schemas.User = {
   indexes: {
     name: { type: 'default', fields: ['name'] },
     email: { type: 'default', fields: ['email'], unique: true },
-    text: { type: 'inverted', fields: ['text'] }
+    text: { type: 'inverted', fields: ['text'] },
+    friends: { type: 'link', fields: ['friends'], table: 'User', indexes: [
+      'name', 'text'
+    ] }
   }
 };
 
@@ -427,7 +430,10 @@ const userSchema2 = {
     email: { type: 'default', fields: ['email'] },
     tagline: { type: 'default', fields: ['tagline'] },
     bio: { type: 'inverted', fields: ['bio'] },
-    text: { type: 'inverted', fields: ['text'] }
+    text: { type: 'inverted', fields: ['text'] },
+    friends: { type: 'link', fields: ['friends'], table: 'User', indexes: [
+      'name', 'text'
+    ] }
   }
 };
 
@@ -467,7 +473,7 @@ Promise.all([
   const versionDoc = await getDocument(db, 'User', ids[0], newDoc._v);
   assert.ok(_.isEqual(newDoc, versionDoc));
   const indexes = await indexDocument(db, db.schemas['User'], versionDoc);
-  assert.ok(indexes.length === 3);
+  assert.ok(indexes.length === 4);
   await delDocument(db, 'User', ids[0]);
   const delDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(!delDoc);
@@ -480,13 +486,13 @@ Promise.all([
   })
   //.on('data', console.log);
   
-  createMigrationStream(db, db.schemas['User'], userSchema2)
-    .on('data', console.log);
+  //createMigrationStream(db, db.schemas['User'], userSchema2)
+    //.on('data', console.log);
 });
 
 indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com', text: 'one two' })
   .then((keys) => {
-    assert.ok(keys.length === 4);
+    assert.ok(keys.length === 5);
     assert.ok(keys[0].type === 'put');
     assert.ok(keys[0].key === '%User/$i/name:James:1');
     assert.ok(keys[0].value === '1');
