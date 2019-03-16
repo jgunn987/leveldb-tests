@@ -107,15 +107,11 @@ function invokeIndexer(db, schema, name, doc) {
     (db, schema, name, schema.indexes[name], doc);
 }
 
-async function defaultIndexer(db, schema, name, options, doc) {
-  return [defaultIndexerGenerateKey(schema, name, options, doc)];
-}
-
-function defaultIndexerGenerateKey(schema, name, options, doc) {
-  return indexKey(schema.name, name, 
+function defaultIndexer(db, schema, name, options, doc) {
+  return [ indexKey(schema.name, name, 
     options.fields.map((field) => 
       jmespath.search(doc, field) || 'NULL').join('&'), 
-    !options.unique && doc._id); 
+    !options.unique && doc._id) ]; 
 }
 
 function tokenize(text) {
@@ -274,6 +270,7 @@ function docLte(db, doc, field, value) {
 function indexLte(db, index, value) {
   return db.createReadStream({ lte: index + ':' + value });
 }
+
 // value must be a RegExp object
 function docMatch(db, doc, field, value) {
   return Promise.resolve(value.test(jmespath.search(doc, field)));
@@ -329,12 +326,24 @@ const db = require('level')('/tmp/test-db');
 db.indexers = {};
 db.indexers.default = defaultIndexer; 
 db.indexers.inverted = invertedIndexer; 
+db.filters = {};
+db.filters.gt = [docGt, indexGt];
+db.filters.gte = [docGte, indexGte];
+db.filters.lt = [docLt, indexLt];
+db.filters.lte = [docLte, indexLte];
+db.filters.eq = [docEq, indexEq];
+db.filters.neq = [docNeq, indexNeq];
+db.filters.match = [docMatch];
+db.filters.search = [docSearch, indexSearch];
+db.filters.within = [docWithin, indexWithin];
+db.filters.without = [docWithout, indexWithout];
 db.schemas = {};
 db.schemas.User = {
   name: 'User',
   indexes: {
     name: { type: 'default', fields: ['name'] },
-    email: { type: 'default', fields: ['email'], unique: true }
+    email: { type: 'default', fields: ['email'], unique: true },
+    text: { type: 'inverted', fields: ['text'] }
   }
 };
 
@@ -344,7 +353,8 @@ const userSchema2 = {
     name: { type: 'default', fields: ['name'] },
     email: { type: 'default', fields: ['email'] },
     tagline: { type: 'default', fields: ['tagline'] },
-    bio: { type: 'inverted', fields: ['bio'] }
+    bio: { type: 'inverted', fields: ['bio'] },
+    text: { type: 'inverted', fields: ['text'] }
   }
 };
 
@@ -384,7 +394,7 @@ Promise.all([
   const versionDoc = await getDocument(db, 'User', ids[0], newDoc._v);
   assert.ok(_.isEqual(newDoc, versionDoc));
   const indexes = await indexDocument(db, db.schemas['User'], versionDoc);
-  assert.ok(indexes.length === 2);
+  assert.ok(indexes.length === 3);
   await delDocument(db, 'User', ids[0]);
   const delDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(!delDoc);
@@ -392,9 +402,10 @@ Promise.all([
     .on('data', console.log);
 });
 
-indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com' })
+indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com', text: 'one two' })
   .then((keys) => {
-    assert.ok(keys.length === 2);
+      console.log(keys);
+    assert.ok(keys.length === 4);
     assert.ok(keys[0].type === 'put');
     assert.ok(keys[0].key === '%User/$i/name:James:1');
     assert.ok(keys[0].value === '1');
