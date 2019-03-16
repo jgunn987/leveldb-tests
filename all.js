@@ -42,6 +42,7 @@ function scanAllIndexKeys(db, schema, indexName) {
 function dropIndex(db, schema, indexName) {
   return scanAllIndexKeys(db, schema, indexName)
     .pipe(new Transform({
+       objectMode: true,
        transform(key, encoding, done) {
          return done(null, { type: 'del', key });
        } 
@@ -53,24 +54,52 @@ function indexAllDocuments(db, schema) {
     .pipe(new Transform({
       objectMode: true,
       transform(data, enc, done) {
-        indexDocument(db, schema, JSON.parse(data.value))
-          then((ops) => ops.map((op) => this.push(op)));
+        const doc = JSON.parse(data.value);
+        if(!doc) return done();
+        indexDocument(db, schema, doc)
+          .then((ops) => ops.map((op) => this.push(op)))
+          .then((ops) => done());
       }
     }));
 }
 
-function indexDocument(db, schema, doc) {
+async function unindexDocument(db, schema, doc) {
+  return (await generateIndexKeys(db, schema, doc)).map((key) => ({
+    type: 'del', key, value: doc._id 
+  }));
+}
+
+async function indexDocument(db, schema, doc) {
+  return (await generateIndexKeys(db, schema, doc)).map((key) => ({
+    type: 'put', key, value: doc._id 
+  }));
+}
+
+function generateIndexKeys(db, schema, doc) {
   return Promise.all(Object.keys(schema.indexes).map((name) => 
     invokeIndexer(db, schema, name, doc)))
-    .then(_.flattenDeep).then((indices) =>
-      indices.map((key) => ({ 
-        type: 'put', key, value: doc._id 
-      })));
+    .then(_.flattenDeep);
 }
 
 function invokeIndexer(db, schema, name, doc) {
   return db.indexers[schema.indexes[name].type]
     (db, schema, name, schema.indexes[name], doc);
+}
+
+async function defaultIndexer(db, schema, name, options, doc) {
+  const key = defaultIndexerGenerateKey(schema, name, options, doc);
+  /* TODO: where to put constraint validation? we can call this
+   *       function when unindexing, that will trigger a violation on
+   *       a unique constraint...
+   * if (options.unique) {
+    try { 
+      await db.get(key);
+    } catch(err) { 
+      return [key];
+    }
+    throw new Error(`Duplicate key on index ${name}`);
+  }*/
+  return [key];
 }
 
 function defaultIndexerGenerateKey(schema, name, options, doc) {
@@ -80,34 +109,23 @@ function defaultIndexerGenerateKey(schema, name, options, doc) {
     !options.unique && doc._id); 
 }
 
-async function defaultIndexer(db, schema, name, options, doc) {
-  const key = defaultIndexerGenerateKey(schema, name, options, doc);
-  if (options.unique) {
-    try { 
-      await db.get(key);
-    } catch(err) { 
-      return [key];
-    }
-    throw new Error(`Duplicate key on index ${name}`);
-  }
-  return [key];
+function migrate(db, p, c) {
+  return new Promise((resolve, reject) => {
+    const batch = db.batch();
+    createMigrationStream(db, p, c)
+      .on('end', () => Promise.resolve(batch.write()))
+      .on('close', () => Promise.resolve(batch.write()))
+      .on('data', (data) => {
+        if(data.type === 'put') {
+          batch.put(data.key, data.value);
+        } else if(data.type === 'del') {
+          batch.del(data.key);
+        }  
+      });
+  });
 }
 
-function compareIndices(a, b, action) {
-  return Object.keys(a.indexes).map((index) => {
-    const ai = a.indexes[index];
-    const bi = b.indexes[index];
-    return !bi || !_.isEqual(ai, bi) ?
-      { type: action, table: a.name, index } : undefined;
-  }).filter(o => o);
-}
-
-function diffSchema(old, current) {
-  return compareIndices(old, current, 'dropIndex')
-    .concat(compareIndices(current, old, 'createIndex'));
-}
-
-function migrateSchema(db, p, c) {
+function createMigrationStream(db, p, c) {
   const streams = mergeStream();
   const diff = diffSchema(p, c);
 
@@ -124,6 +142,20 @@ function migrateSchema(db, p, c) {
   return streams;
 }
 
+function diffSchema(old, current) {
+  return compareIndices(old, current, 'dropIndex')
+    .concat(compareIndices(current, old, 'createIndex'));
+}
+
+function compareIndices(a, b, action) {
+  return Object.keys(a.indexes).map((index) => {
+    const ai = a.indexes[index];
+    const bi = b.indexes[index];
+    return !bi || !_.isEqual(ai, bi) ?
+      { type: action, table: a.name, index } : undefined;
+  }).filter(o => o);
+}
+
 async function putDocument(db, table, doc) {
   const schema = db.schemas[table];
   const newDoc = createDocument(db, doc);
@@ -136,22 +168,27 @@ async function putDocument(db, table, doc) {
   return newDoc._id;
 }
 
-async function getDocument(db, table, uuid, version) {
-  return JSON.parse(version ?
-    await db.get(docKey(table, uuid, version)):
-    await db.get(docLatestKey(table, uuid)));
-}
-
-function delDocument(db, table, uuid) {
-  return db.put(docLatestKey(table, uuid), '');
-}
-
 function createDocument(db, doc) {
   return Object.assign({}, doc || {}, {
     _id: doc._id || uuid.v4(),
     _v: (+new Date()).toString()
   });
 }
+
+async function getDocument(db, table, uuid, version) {
+  return JSON.parse(version ?
+    await db.get(docKey(table, uuid, version)):
+    await db.get(docLatestKey(table, uuid)));
+}
+
+async function delDocument(db, table, uuid) {
+  const doc = await getDocument(db, table, uuid);
+  return await db.batch([
+    ...await unindexDocument(db, db.schemas[table], doc), 
+    { type: 'put', key: docLatestKey(table, doc._id), value: 'null' }
+  ]);
+}
+
 
 const db = require('level')('/tmp/test-db');
 db.indexers = {};
@@ -190,17 +227,31 @@ const doc = createDocument(db, { title: 'Create' });
 assert.ok(doc._id);
 assert.ok(doc._v);
 
-putDocument(db, 'User', { name: 'Jameson', email: 'jgunn987@gmail.com' })
-  .then(async (id) => {
-    const newDoc = await getDocument(db, 'User', id);
-    console.log(newDoc);
-    assert.ok(newDoc._id === id);
-    assert.ok(newDoc._v);
-    assert.ok(newDoc.name === 'Jameson');
-    assert.ok(newDoc.email === 'jgunn987@gmail.com');
-    const versionDoc = await getDocument(db, 'User', id, newDoc._v);
-    assert.ok(_.isEqual(newDoc, versionDoc));
-  });
+Promise.all([
+  putDocument(db, 'User', { name: 'Jameson', email: 'jgunn987@gmail.com' }),
+  putDocument(db, 'User', { name: 'Jameson1', email: 'jgunn987@gmail.com1' }),
+  putDocument(db, 'User', { name: 'Jameson2', email: 'jgunn987@gmail.com2' }),
+  putDocument(db, 'User', { name: 'Jameson3', email: 'jgunn987@gmail.com3' }),
+  putDocument(db, 'User', { name: 'Jameson4', email: 'jgunn987@gmail.com4' }),
+  putDocument(db, 'User', { name: 'Jameson5', email: 'jgunn987@gmail.com5' }),
+  putDocument(db, 'User', { name: 'Jameson6', email: 'jgunn987@gmail.com6' }),
+]).then(async (ids) => {
+  const newDoc = await getDocument(db, 'User', ids[0]);
+  assert.ok(newDoc._id === ids[0]);
+  assert.ok(newDoc._v);
+  assert.ok(newDoc.name === 'Jameson');
+  assert.ok(newDoc.email === 'jgunn987@gmail.com');
+  const versionDoc = await getDocument(db, 'User', ids[0], newDoc._v);
+  assert.ok(_.isEqual(newDoc, versionDoc));
+  const indexes = await indexDocument(db, db.schemas['User'], versionDoc);
+  assert.ok(indexes.length === 2);
+  await delDocument(db, 'User', ids[0]);
+  const delDoc = await getDocument(db, 'User', ids[0]);
+  assert.ok(!delDoc);
+
+  createMigrationStream(db, db.schemas['User'], userSchema2)
+    .on('data', console.log);
+});
 
 indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987@gmail.com' })
   .then((keys) => {
