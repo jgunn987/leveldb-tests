@@ -66,16 +66,14 @@ function indexAllDocuments(db, schema, indexes = null) {
 }
 
 async function unindexDocument(db, schema, doc, indexes = null) {
-  return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => ({
-    type: 'del', key, value: doc._id 
-  }));
+  return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => 
+    ({ type: 'del', key }));
 }
 
 async function indexDocument(db, schema, doc, indexes = null) {
   await validateIndexOp(db, schema, doc, indexes);
-  return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => ({
-    type: 'put', key, value: doc._id 
-  }));
+  return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => 
+   ({ type: 'put', key, value: doc._id }));
 }
 
 async function validateIndexOp(db, schema, doc, indexes) {
@@ -136,8 +134,8 @@ function migrate(db, p, c) {
   return new Promise((resolve, reject) => {
     const batch = db.batch();
     createMigrationStream(db, p, c)
-      .on('end', () => Promise.resolve(batch.write()))
-      .on('close', () => Promise.resolve(batch.write()))
+      .on('end', () => resolve(batch.write()))
+      .on('close', () => resolve(batch.write()))
       .on('data', (data) => {
         if(data.type === 'put') {
           batch.put(data.key, data.value);
@@ -251,13 +249,37 @@ async function delDocument(db, table, uuid) {
 }
 */
 function queryDocuments(db, query) {
-  const indexName = findIndex(db, query.table, query.filter.field);
-  const filter = db.filters[query.filter.type];
-  return filter[1](db, indexBaseKey(query.table, indexName), query.filter.value);
+  parseFilter(db, query, query.filter);
 }
 
-function findIndex(db, table, field) {
-  return 'name';
+function parseFilter(db, query, filter) {
+  switch(query.filter.type) {
+    case 'union':
+      break;
+    case 'intersection':
+      break;
+    case 'eq':
+    case 'neq':
+    case 'gt':
+    case 'gte':
+    case 'lt':
+    case 'lte':
+    case 'match':
+    case 'search':
+    case 'within':
+    case 'without':
+      return findIndexer(db, query, filter);
+  }
+}
+
+function findIndexer(db, query, filter) {
+  const indexer = db.filters[filter.type];
+  const indexes = db.schemas[query.table].indexes;
+  const indexName = Object.keys(indexes).find((name) => 
+    indexes[name].fields[0] === filter.field);
+  return indexName ?
+    { type: 'index', indexer: indexer[1] }:
+    { type: 'scan', indexer: indexer[0] };
 }
 
 function docEq(db, doc, field, value) {
@@ -444,12 +466,14 @@ Promise.all([
   await delDocument(db, 'User', ids[0]);
   const delDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(!delDoc);
+  
   queryDocuments(db, { 
     table: 'User', 
     filter: { 
-      type: 'eq', field: 'name', value: 'Jameson2'
+      type: 'eq', field: 'name', value: 'Jameson1'
     }
   }).on('data', console.log);
+  
   //createMigrationStream(db, db.schemas['User'], userSchema2)
   //  .on('data', console.log);
 });

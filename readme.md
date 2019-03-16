@@ -80,3 +80,41 @@ $l/pos/{predicate}-{object.uuid}-{subject.uuid} => {spo} |
 $l/ops/{object.uuid}-{predicate}-{subject.uuid} => {spo} | 
 $l/osp/{object.uuid}-{subject.uuid}-{predicate} => {spo} |
 
+```javascript
+function testOrQuery() {
+  return query('Entity')
+    .filter((q) => 
+      q.union([ //OR
+        q.eq('name', 'james'),
+        q.eq('name', 'jame'),
+        q.eq('name', 'jam'),
+        q.eq('name', 'ja'),
+        q.eq('name', 'j'),
+        q.gt('age', 25), 
+        q.within('loc', '12.3458', '114.4489'),
+        q.without('loc', '12.3458', '114.4489'),
+        q.match('email', '*@{1}.*'),
+        q.intersection([ //AND
+          q.eq('name', 'gam'),
+          q.eq('name', 'ga'),
+          q.eq('name', 'g'),
+        ])
+      ]))
+    .project('comments', 'Comment', (q) =>
+        q.filter((q) => 
+          q.intersection([
+            q.search('text', 'Cool Beans'),
+            q.lte('number', 1),
+            q.eq('name', 'gam'),
+            q.eq('name', 'ga'),
+            q.eq('name', 'g'),
+          ])
+        .projection('author', 'Author', (q) =>
+          q.filter(q) =>
+            q.eq('name', 'James'))
+        .order('date', 'asc')
+        .limit(100))
+    .order('date', 'asc')
+    .limit(100);
+}
+```

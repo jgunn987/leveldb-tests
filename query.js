@@ -139,6 +139,9 @@ function testOrQuery() {
             q.eq('name', 'ga'),
             q.eq('name', 'g'),
           ])
+        .projection('author', 'Author', (q) =>
+          q.filter(q) =>
+            q.eq('name', 'James'))
         .order('date', 'asc')
         .limit(100))
     .order('date', 'asc')
