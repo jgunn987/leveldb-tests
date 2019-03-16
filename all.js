@@ -27,41 +27,34 @@ function indexKey(table, indexName, value, uuid) {
   return `%${table}/$i/${indexName}:${value}` + (uuid ? ':' + uuid : '');
 }
 
-function scanAllDocuments(db, schema) {
-  return db.createReadStream({ 
-    gte: docLatestBaseKey(schema.name),
-    lt: docLatestBaseKey(schema.name) + '~'
-  });
+function scanAllDocuments(db, table) {
+  const key = docLatestBaseKey(table);
+  return db.createReadStream({ gte: key, lt: key + '~' });
 }
 
 function scanAllIndexKeys(db, schema, indexName) {
-  return db.createKeyStream({ 
-    gte: indexBaseKey(schema.name, indexName),
-    lt: indexBaseKey(schema.name, indexName) + '~'
-  });
+  const key = indexBaseKey(schema.name, indexName);
+  return db.createKeyStream({ gte: key, lt: key + '~' });
+}
+
+function transformer(fn) {
+  return new Transform({ objectMode: true, transform: fn });
 }
 
 function dropIndex(db, schema, indexName) {
   return scanAllIndexKeys(db, schema, indexName)
-    .pipe(new Transform({
-       objectMode: true,
-       transform(key, encoding, done) {
-         return done(null, { type: 'del', key });
-       } 
-     }));
+    .pipe(transformer((key, encoding, done) =>
+       done(null, { type: 'del', key })));
 }
 
 function indexAllDocuments(db, schema, indexes = null) {
-  return scanAllDocuments(db, schema)
-    .pipe(new Transform({
-      objectMode: true,
-      transform(data, enc, done) {
-        const doc = JSON.parse(data.value);
-        if(!doc) return done();
-        indexDocument(db, schema, doc, indexes)
-          .then((ops) => ops.map((op) => this.push(op)))
-          .then((ops) => done());
-      }
+  return scanAllDocuments(db, schema.name)
+    .pipe(transformer(function (data, enc, done) {
+      const doc = JSON.parse(data.value);
+      if(!doc) return done();
+      indexDocument(db, schema, doc, indexes)
+        .then((ops) => ops.map((op) => this.push(op)))
+        .then((ops) => done());
     }));
 }
 
@@ -250,7 +243,18 @@ async function delDocument(db, table, uuid) {
 */
 function queryDocuments(db, query) {
   const result = parseFilter(db, query, query.filter);
-  console.log(result);
+  if(result.type === 'index') {
+    // TODO
+  } else {
+    return scanAllDocuments(db, query.table)
+      .pipe(new Transform({
+        objectMode: true,
+        transform(data, enc, done) {
+          const doc = JSON.parse(data.value);
+          if(!doc) return done();
+        }
+      }));
+  }
 }
 
 function parseFilter(db, query, filter) {
@@ -473,10 +477,11 @@ Promise.all([
     filter: { 
       type: 'eq', field: 'name', value: 'Jameson1'
     }
-  }).on('data', console.log);
+  })
+  //.on('data', console.log);
   
-  //createMigrationStream(db, db.schemas['User'], userSchema2)
-  //  .on('data', console.log);
+  createMigrationStream(db, db.schemas['User'], userSchema2)
+    .on('data', console.log);
 });
 
 indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com', text: 'one two' })
