@@ -1,6 +1,3 @@
-require('./indexer.js');
-require('./schema.js');
-
-const db = require('./../db');
-const level = require('level');
-const
+const db = {};
+require('./indexer.js')(db);
+require('./schema.js')(db);;
