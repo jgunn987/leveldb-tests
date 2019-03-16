@@ -49,34 +49,34 @@ function dropIndex(db, schema, indexName) {
      }));
 }
 
-function indexAllDocuments(db, schema) {
+function indexDocuments(db, schema, indexes) {
   return scanAllDocuments(db, schema)
     .pipe(new Transform({
       objectMode: true,
       transform(data, enc, done) {
         const doc = JSON.parse(data.value);
         if(!doc) return done();
-        indexDocument(db, schema, doc)
+        indexDocument(db, schema, doc, indexes)
           .then((ops) => ops.map((op) => this.push(op)))
           .then((ops) => done());
       }
     }));
 }
 
-async function unindexDocument(db, schema, doc) {
-  return (await generateIndexKeys(db, schema, doc)).map((key) => ({
+async function unindexDocument(db, schema, doc, indexes) {
+  return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => ({
     type: 'del', key, value: doc._id 
   }));
 }
 
-async function indexDocument(db, schema, doc) {
-  return (await generateIndexKeys(db, schema, doc)).map((key) => ({
+async function indexDocument(db, schema, doc, indexes) {
+  return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => ({
     type: 'put', key, value: doc._id 
   }));
 }
 
-function generateIndexKeys(db, schema, doc) {
-  return Promise.all(Object.keys(schema.indexes).map((name) => 
+function generateIndexKeys(db, schema, doc, indexes) {
+  return Promise.all((indexes || Object.keys(schema.indexes)).map((name) => 
     invokeIndexer(db, schema, name, doc)))
     .then(_.flattenDeep);
 }
@@ -124,20 +124,25 @@ function migrate(db, p, c) {
       });
   });
 }
-
+/* TODO: We cannot merge create and drop streams
+ *       as we may delete a newly created index
+ *       we must run the create indexer on specific new fields
+ */
 function createMigrationStream(db, p, c) {
   const streams = mergeStream();
   const diff = diffSchema(p, c);
+  const create = [];
 
-  let create = false;
   diff.forEach((op) => {
-    op.type === 'dropIndex' ? 
-      streams.add(dropIndex(db, p, op.index)):
-      create = true;
+    if(op.type === 'dropIndex') {
+      streams.add(dropIndex(db, p, op.index));
+    } else if(op.type === 'createIndex') {
+      create.push(op.index);
+    }
   });
 
-  if(create) {
-    streams.add(indexAllDocuments(db, c));
+  if(create.length) {
+    streams.add(indexDocuments(db, c, create));
   }
   return streams;
 }
@@ -153,7 +158,7 @@ function compareIndices(a, b, action) {
     const bi = b.indexes[index];
     return !bi || !_.isEqual(ai, bi) ?
       { type: action, table: a.name, index } : undefined;
-  }).filter(o => o);
+  }).filter(Boolean);
 }
 
 async function putDocument(db, table, doc) {
@@ -188,7 +193,6 @@ async function delDocument(db, table, uuid) {
     { type: 'put', key: docLatestKey(table, doc._id), value: 'null' }
   ]);
 }
-
 
 const db = require('level')('/tmp/test-db');
 db.indexers = {};
