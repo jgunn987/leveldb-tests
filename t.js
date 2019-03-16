@@ -1,30 +1,17 @@
-const defaults = require('./indexers/defaults');
-const inverted = require('./indexers/inverted');
-const geo = require('./indexers/geo');
-const link = require('./indexers/link');
-const { docGt, indexGt } = require('./filters/gt');
-const { docGte, indexGte } = require('./filters/gt');
-const { docLt, indexLt } = require('./filters/gt');
-const { docLte, indexLte } = require('./filters/gt');
-const { docEq, indexEq } = require('./filters/gt');
-const { docNeq, indexNeq } = require('./filters/gt');
-const { docBetween, indexBetween } = require('./filters/gt');
-const { docMatch, indexMatch } = require('./filters/gt');
+const db = require('level')('/tmp/test-db');
 
-module.exports = (driver) {
-  const db = james(driver);
-  db.indexer('default', default.index)
-  db.indexer('inverted', inverted.index)
-  db.indexer('geo', geo.index)
-  db.indexer('link', geo.link);
-  db.filter('gt', docGt, indexGt);
-  db.filter('gte', docGte, indexGte);
-  db.filter('lt', docLt, indexLt);
-  db.filter('lte', docLte, indexLte);
-  db.filter('eq', docEq, indexEq);
-  db.filter('neq', docNeq, indexNeq);
-  db.filter('between', docBetween, indexBetween);
-  db.filter('match', docMatch, indexMatch);
-  return db;
-};
+db.batch()
+  .put('%User/$i/name:Jameson1:434f358e-b434-41e7-af4f-a6a8c546464a', 'v1')
+  .put('%User/$i/name:Jameson2:', 'v1')
+  .write().then(() =>
+      //db.createReadStream({
+      //  gte: '%User/$i/name:Jameson1:434f358e-b434-41e7-af4f-a6a8c546464a',
+      //  lte: '%User/$i/name:Jameson1:434f358e-b434-41e7-af4f-a6a8c546464a'
+      //}).on('data', console.log)
+      db.createReadStream({
+gte: '%User/$i/name:Jameson2:',
+        lte: '%User/$i/name:Jameson~'
+      }).on('data', console.log)
+
+);
 

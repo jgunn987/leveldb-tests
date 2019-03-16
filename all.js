@@ -213,6 +213,52 @@ async function delDocument(db, table, uuid) {
     { type: 'put', key: docLatestKey(table, doc._id), value: 'null' }
   ]);
 }
+/*
+
+{
+  table: 'Entity',
+  filter: {
+    type: 'intersection',
+    expressions: [
+      { type: 'eq', field: 'name', value: 'James' }, 
+      { type: 'gt', field: 'name', value: 'James' }, 
+      { type: 'lt', field: 'name', value: 'James' }, 
+      { type: 'match', field: 'name', value: '.*' },
+      { type: 'union', expressions: [{
+        { type: 'eq', field: 'name', value: 'James' }, 
+        { type: 'gt', field: 'name', value: 'James' }, 
+        { type: 'lt', field: 'name', value: 'James' }, 
+        { type: 'match', field: 'name', value: '.*' },
+      }] },
+    ]
+  }],
+  projections: [{
+    field: 'comments',
+    query: {
+      table: 'Comment',
+      filter: [],
+      projections: [{
+        field: 'authors',
+        table: 'User',
+        filter: []
+      }]
+    }
+  }]
+  distinct: ['name', 'age'],
+  order: { fields: ['name', 'age'], dir: 'ASC' },
+  offset: 0,
+  limit: 100
+}
+*/
+function queryDocuments(db, query) {
+  const indexName = findIndex(db, query.table, query.filter.field);
+  const filter = db.filters[query.filter.type];
+  return filter[1](db, indexBaseKey(query.table, indexName), query.filter.value);
+}
+
+function findIndex(db, table, field) {
+  return 'name';
+}
 
 function docEq(db, doc, field, value) {
   return Promise.resolve(jmespath.search(doc, field) === value);
@@ -220,7 +266,7 @@ function docEq(db, doc, field, value) {
 
 function indexEq(db, index, value) {
   return db.createReadStream({
-    gte: index + ':' + value,
+    gte: index + ':' + value + ':',
     lte: index + ':' + value + '~'
   });
 }
@@ -291,7 +337,7 @@ function indexSearch(db, index, values) {
   return mergeStream(...tokenize(values).map((token) =>
     db.createReadStream({
       gte: index + ':' + token,
-      lte: index + ':' + token + '~'
+      lte: index + ':' + token
     })));
 }
 
@@ -398,13 +444,18 @@ Promise.all([
   await delDocument(db, 'User', ids[0]);
   const delDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(!delDoc);
-  createMigrationStream(db, db.schemas['User'], userSchema2)
-    .on('data', console.log);
+  queryDocuments(db, { 
+    table: 'User', 
+    filter: { 
+      type: 'eq', field: 'name', value: 'Jameson2'
+    }
+  }).on('data', console.log);
+  //createMigrationStream(db, db.schemas['User'], userSchema2)
+  //  .on('data', console.log);
 });
 
 indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com', text: 'one two' })
   .then((keys) => {
-      console.log(keys);
     assert.ok(keys.length === 4);
     assert.ok(keys[0].type === 'put');
     assert.ok(keys[0].key === '%User/$i/name:James:1');
@@ -413,4 +464,3 @@ indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn98799
     assert.ok(keys[1].key === '%User/$i/email:jgunn987999@gmail.com');
     assert.ok(keys[1].value === '1');
   });
-
