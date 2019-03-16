@@ -249,7 +249,8 @@ async function delDocument(db, table, uuid) {
 }
 */
 function queryDocuments(db, query) {
-  parseFilter(db, query, query.filter);
+  const result = parseFilter(db, query, query.filter);
+  console.log(result);
 }
 
 function parseFilter(db, query, filter) {
