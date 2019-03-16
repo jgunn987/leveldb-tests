@@ -4,6 +4,8 @@ const uuid = require('uuid');
 const _ = require('lodash');
 const mergeStream = require('merge-stream');
 const { Transform } = require('stream');
+const natural = require('natural');
+const tokenizer = /[\W\d]+/;
 
 function docLatestBaseKey(table) {
   return `%${table}/$latest`;
@@ -49,7 +51,7 @@ function dropIndex(db, schema, indexName) {
      }));
 }
 
-function indexDocuments(db, schema, indexes) {
+function indexAllDocuments(db, schema, indexes = null) {
   return scanAllDocuments(db, schema)
     .pipe(new Transform({
       objectMode: true,
@@ -63,19 +65,38 @@ function indexDocuments(db, schema, indexes) {
     }));
 }
 
-async function unindexDocument(db, schema, doc, indexes) {
+async function unindexDocument(db, schema, doc, indexes = null) {
   return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => ({
     type: 'del', key, value: doc._id 
   }));
 }
 
-async function indexDocument(db, schema, doc, indexes) {
+async function indexDocument(db, schema, doc, indexes = null) {
+  await validateIndexOp(db, schema, doc, indexes);
   return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => ({
     type: 'put', key, value: doc._id 
   }));
 }
 
-function generateIndexKeys(db, schema, doc, indexes) {
+async function validateIndexOp(db, schema, doc, indexes) {
+  return Promise.all((indexes || Object.keys(schema.indexes)).map(async (name) => { 
+    if(schema.indexes[name].unique === true) {
+      const keys = await invokeIndexer(db, schema, name, doc);
+      return Promise.all(keys.map(async (key) => {
+        let id;
+        try {
+          id = await db.get(key);
+        } catch (err) {
+          return true;
+        }
+        if(doc._id !== id)
+          throw new Error(`Duplicate key '${key}'`);
+      }));
+    }
+  }));
+}
+
+function generateIndexKeys(db, schema, doc, indexes = null) {
   return Promise.all((indexes || Object.keys(schema.indexes)).map((name) => 
     invokeIndexer(db, schema, name, doc)))
     .then(_.flattenDeep);
@@ -87,19 +108,7 @@ function invokeIndexer(db, schema, name, doc) {
 }
 
 async function defaultIndexer(db, schema, name, options, doc) {
-  const key = defaultIndexerGenerateKey(schema, name, options, doc);
-  /* TODO: where to put constraint validation? we can call this
-   *       function when unindexing, that will trigger a violation on
-   *       a unique constraint...
-   * if (options.unique) {
-    try { 
-      await db.get(key);
-    } catch(err) { 
-      return [key];
-    }
-    throw new Error(`Duplicate key on index ${name}`);
-  }*/
-  return [key];
+  return [defaultIndexerGenerateKey(schema, name, options, doc)];
 }
 
 function defaultIndexerGenerateKey(schema, name, options, doc) {
@@ -107,6 +116,24 @@ function defaultIndexerGenerateKey(schema, name, options, doc) {
     options.fields.map((field) => 
       jmespath.search(doc, field) || 'NULL').join('&'), 
     !options.unique && doc._id); 
+}
+
+function tokenize(text) {
+  return _.uniq(text.split(tokenizer)
+    .map(token => token.toLowerCase())
+    .map(natural.PorterStemmer.stem)
+    .filter(Boolean));
+}
+
+function invertedIndexer(db, schema, name, options, doc) {
+  return options.fields.map((field) => {
+    let text = jmespath.search(doc, field);
+    if(typeof text !== 'string') {
+      text = JSON.stringify(text);
+    }
+    return tokenize(text).map((term) =>
+      indexKey(schema.name, name, term === 'null' ? 'NULL' : term, doc._id));
+  });
 }
 
 function migrate(db, p, c) {
@@ -124,10 +151,7 @@ function migrate(db, p, c) {
       });
   });
 }
-/* TODO: We cannot merge create and drop streams
- *       as we may delete a newly created index
- *       we must run the create indexer on specific new fields
- */
+
 function createMigrationStream(db, p, c) {
   const streams = mergeStream();
   const diff = diffSchema(p, c);
@@ -142,7 +166,7 @@ function createMigrationStream(db, p, c) {
   });
 
   if(create.length) {
-    streams.add(indexDocuments(db, c, create));
+    streams.add(indexAllDocuments(db, c, create));
   }
   return streams;
 }
@@ -194,9 +218,117 @@ async function delDocument(db, table, uuid) {
   ]);
 }
 
+function docEq(db, doc, field, value) {
+  return Promise.resolve(jmespath.search(doc, field) === value);
+}
+
+function indexEq(db, index, value) {
+  return db.createReadStream({
+    gte: index + ':' + value,
+    lte: index + ':' + value + '~'
+  });
+}
+
+function docNeq(db, doc, field, value) {
+  return Promise.resolve(jmespath.search(doc, field) !== value);
+}
+
+function indexNeq(db, index, value) {
+  return mergeStream(db.createReadStream({
+    gt: index + ':',
+    lt: index + ':' + value
+  }), db.createReadStream({
+    gt: index + ':' + value,
+    lt: index + ':~'
+  }));
+}
+
+function docGt(db, doc, field, value) {
+  return Promise.resolve(jmespath.search(doc, field) > value);
+}
+
+function indexGt(db, index, value) {
+  return db.createReadStream({ gt: index + ':' + value });
+}
+
+function docGte(db, doc, field, value) {
+  return Promise.resolve(jmespath.search(doc, field) >= value);
+}
+
+function indexGte(db, index, value) {
+  return db.createReadStream({ gte: index + ':' + value });
+}
+
+function docLt(db, doc, field, value) {
+  return Promise.resolve(jmespath.search(doc, field) < value);
+}
+
+function indexLt(db, index, value) {
+  return db.createReadStream({ lt: index + ':' + value });
+}
+
+function docLte(db, doc, field, value) {
+  return Promise.resolve(jmespath.search(doc, field) <= value);
+}
+
+function indexLte(db, index, value) {
+  return db.createReadStream({ lte: index + ':' + value });
+}
+// value must be a RegExp object
+function docMatch(db, doc, field, value) {
+  return Promise.resolve(value.test(jmespath.search(doc, field)));
+}
+
+function docSearch(db, doc, field, value) {
+  let text = jmespath.search(doc, field);
+  if(typeof text !== 'string') {
+    text = JSON.stringify(text);
+  }
+  const docTokens = tokenize(text);
+  const valTokens = tokenize(text);
+  // are vaTokens all inside docTokens?
+}
+
+// add a match all or match any option
+function indexSearch(db, index, values) {
+  return mergeStream(...tokenize(values).map((token) =>
+    db.createReadStream({
+      gte: index + ':' + token,
+      lte: index + ':' + token + '~'
+    })));
+}
+
+function docWithin(db, doc, field, start, end) {
+  const field = jmespath.search(doc, field);
+  return Promise.resolve(field >= start && field <= end);
+}
+
+function indexWithin(db, index, start, end) {
+  return db.createReadStream({
+    gte: index + ':' + start,
+    lte: index + ':' + end
+  });
+}
+
+function docWithout(db, doc, field, start, end) {
+  const field = jmespath.search(doc, field);
+  return Promise.resolve(field < start || field > end);
+}
+
+function indexWithout(db, index, start, end) {
+  return mergeStream(db.createReadStream({
+    gt: index + ':',
+    lt: index + ':' + start
+  }), db.createReadStream({
+    gt: index + ':' + end,
+    lt: index + ':~'
+  }));
+}
+
 const db = require('level')('/tmp/test-db');
 db.indexers = {};
 db.indexers.default = defaultIndexer; 
+db.indexers.inverted = invertedIndexer; 
 db.schemas = {};
 db.schemas.User = {
   name: 'User',
@@ -211,12 +343,13 @@ const userSchema2 = {
   indexes: {
     name: { type: 'default', fields: ['name'] },
     email: { type: 'default', fields: ['email'] },
-    tagline: { type: 'default', fields: ['tagline'] }
+    tagline: { type: 'default', fields: ['tagline'] },
+    bio: { type: 'inverted', fields: ['bio'] }
   }
 };
 
 const diff = diffSchema(db.schemas.User, userSchema2);
-assert.ok(diff.length === 3);
+assert.ok(diff.length === 4);
 assert.ok(diff[0].type === 'dropIndex');
 assert.ok(diff[0].table === 'User');
 assert.ok(diff[0].index === 'email');
@@ -226,6 +359,9 @@ assert.ok(diff[1].index === 'email');
 assert.ok(diff[2].type === 'createIndex');
 assert.ok(diff[2].table === 'User');
 assert.ok(diff[2].index === 'tagline');
+assert.ok(diff[3].type === 'createIndex');
+assert.ok(diff[3].table === 'User');
+assert.ok(diff[3].index === 'bio');
 
 const doc = createDocument(db, { title: 'Create' });
 assert.ok(doc._id);
@@ -252,19 +388,18 @@ Promise.all([
   await delDocument(db, 'User', ids[0]);
   const delDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(!delDoc);
-
   createMigrationStream(db, db.schemas['User'], userSchema2)
     .on('data', console.log);
 });
 
-indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987@gmail.com' })
+indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com' })
   .then((keys) => {
     assert.ok(keys.length === 2);
     assert.ok(keys[0].type === 'put');
     assert.ok(keys[0].key === '%User/$i/name:James:1');
     assert.ok(keys[0].value === '1');
     assert.ok(keys[1].type === 'put');
-    assert.ok(keys[1].key === '%User/$i/email:jgunn987@gmail.com');
+    assert.ok(keys[1].key === '%User/$i/email:jgunn987999@gmail.com');
     assert.ok(keys[1].value === '1');
   });
 
