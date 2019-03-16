@@ -28,27 +28,27 @@ function indexKey(table, indexName, value, uuid) {
 }
 
 function sopKey(s, o, p) {
-  return `$l/sop/${s}-${o}-${p}`;
+  return `$l/sop/${s}:${o}:${p}`;
 }
 
 function spoKey(s, p, o) {
-  return `$l/spo/${s}-${p}-${o}`;
+  return `$l/spo/${s}:${p}:${o}`;
 }
 
 function psoKey(p, s, o) {
-  return `$l/pso/${p}-${s}-${o}`;
+  return `$l/pso/${p}:${s}:${o}`;
 }
 
 function posKey(p, o, s) {
-  return `$l/pos/${p}-${o}-${s}`;
+  return `$l/pos/${p}:${o}:${s}`;
 }
 
 function opsKey(o, p, s) {
-  return `$l/ops/${o}-${p}-${s}`;
+  return `$l/ops/${o}:${p}:${s}`;
 }
 
 function ospKey(o, s, p) {
-  return `$l/osp/${o}-${s}-${p}`;
+  return `$l/osp/${o}:${s}:${p}`;
 }
 
 function scanAllDocuments(db, table) {
