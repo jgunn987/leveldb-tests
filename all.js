@@ -27,6 +27,30 @@ function indexKey(table, indexName, value, uuid) {
   return `%${table}/$i/${indexName}:${value}` + (uuid ? ':' + uuid : '');
 }
 
+function sopKey(s, o, p) {
+  return `$l/sop/${s}-${o}-${p}`;
+}
+
+function spoKey(s, p, o) {
+  return `$l/spo/${s}-${p}-${o}`;
+}
+
+function psoKey(p, s, o) {
+  return `$l/pso/${p}-${s}-${o}`;
+}
+
+function posKey(p, o, s) {
+  return `$l/pos/${p}-${o}-${s}`;
+}
+
+function opsKey(o, p, s) {
+  return `$l/ops/${o}-${p}-${s}`;
+}
+
+function ospKey(o, s, p) {
+  return `$l/osp/${o}-${s}-${p}`;
+}
+
 function scanAllDocuments(db, table) {
   const key = docLatestBaseKey(table);
   return db.createReadStream({ gte: key, lt: key + '~' });
@@ -63,6 +87,8 @@ async function unindexDocument(db, schema, doc, indexes = null) {
     ({ type: 'del', key }));
 }
 
+//TODO: run the validator after indexing has taken place otherwise we
+//      are doing the same thing twice and it is a performance hit
 async function indexDocument(db, schema, doc, indexes = null) {
   await validateIndexOp(db, schema, doc, indexes);
   return (await generateIndexKeys(db, schema, doc, indexes)).map((key) => 
@@ -109,7 +135,18 @@ function defaultIndexer(db, schema, name, options, doc) {
 }
 
 function linkIndexer(db, schema, name, options, doc) {
-  return defaultIndexer(...arguments);
+  const s = doc._id;
+  const p = options.fields[0];
+  const o = 'object._id';
+  return generateLinkKeys(s, p, o);
+}
+
+function generateLinkKeys(s, o, p) {
+  return [
+    sopKey(s, o, p), spoKey(s, p, o),
+    psoKey(p, s, o), posKey(p, o, s),
+    opsKey(o, p, s), ospKey(o, s, p)
+  ];
 }
 
 function tokenize(text) {
@@ -139,6 +176,7 @@ function migrate(db, p, c) {
       await createBatch.write();
     };
     createMigrationStream(db, p, c)
+      .on('error', reject)
       .on('end', end)
       .on('close', end)
       .on('data', (data) => {
