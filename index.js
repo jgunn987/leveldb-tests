@@ -163,11 +163,11 @@ function tokenize(text) {
 function invertedIndexer(db, schema, name, options, doc) {
   return options.fields.map((field) => {
     let text = jmespath.search(doc, field);
-    if(typeof text !== 'string') {
+    if(typeof text !== 'string' && text) {
       text = JSON.stringify(text);
     }
-    return tokenize(text).map((term) =>
-      ({ key: indexKey(schema.name, name, term === 'null' ? 'NULL' : term, doc._id), value: doc._id }));
+    return tokenize(text || '').map((term) =>
+      ({ key: indexKey(schema.name, name, term, doc._id), value: doc._id }));
   });
 }
 
@@ -500,14 +500,13 @@ assert.ok(doc._v);
 
 Promise.all([
   putDocument(db, 'User', { name: 'Jameson', email: 'jgunn987@gmail.com' }),
-  //putDocument(db, 'User', { name: 'Jameson1', email: 'jgunn987@gmail.com1' }),
-  //putDocument(db, 'User', { name: 'Jameson2', email: 'jgunn987@gmail.com2' }),
-  //putDocument(db, 'User', { name: 'Jameson3', email: 'jgunn987@gmail.com3' }),
-  //putDocument(db, 'User', { name: 'Jameson4', email: 'jgunn987@gmail.com4' }),
-  //putDocument(db, 'User', { name: 'Jameson5', email: 'jgunn987@gmail.com5' }),
-  //putDocument(db, 'User', { name: 'Jameson6', email: 'jgunn987@gmail.com6' }),
+  putDocument(db, 'User', { name: 'Jameson1', email: 'jgunn987@gmail.com1' }),
+  putDocument(db, 'User', { name: 'Jameson2', email: 'jgunn987@gmail.com2' }),
+  putDocument(db, 'User', { name: 'Jameson3', email: 'jgunn987@gmail.com3' }),
+  putDocument(db, 'User', { name: 'Jameson4', email: 'jgunn987@gmail.com4' }),
+  putDocument(db, 'User', { name: 'Jameson5', email: 'jgunn987@gmail.com5' }),
+  putDocument(db, 'User', { name: 'Jameson6', email: 'jgunn987@gmail.com6' }),
 ]).then(async (ids) => {
-  /*
   const newDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(newDoc._id === ids[0]);
   assert.ok(newDoc._v);
@@ -516,7 +515,7 @@ Promise.all([
   const versionDoc = await getDocument(db, 'User', ids[0], newDoc._v);
   assert.ok(_.isEqual(newDoc, versionDoc));
   const indexes = await indexDocument(db, db.schemas['User'], versionDoc);
-  assert.ok(indexes.length === 9);
+  assert.ok(indexes.length === 8);
   await delDocument(db, 'User', ids[0]);
   const delDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(!delDoc);
@@ -531,7 +530,6 @@ Promise.all([
   
   //createMigrationStream(db, db.schemas['User'], userSchema2)
     //.on('data', console.log);
-  */
 });
 /*
 indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com', text: 'one two' })
