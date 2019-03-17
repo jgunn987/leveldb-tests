@@ -9,21 +9,32 @@ const tokenizer = /[\W\d]+/;
 const vm = require('vm');
 const esprima = require('esprima');
 
-// for storing views
 function compareFunctions(a, b) {
-  const ap = esprima.parse(a);
-  const bp = esprima.parse(b);
-  return _.isEqual(ap, bp);
+  return _.isEqual(esprima.parse(a), esprima.parse(b));
 }
 
-function compileFn(db, fn) {
-  return new vm.Script(fn)
-    .runInContext(db.viewContext);
+function compileFn(fn, context) {
+  return new vm.Script(fn).runInContext(context);
 }
 
 function tid(n) {
   return +new Date() + ("0000000000000000")
     .substr((16 + n.toString().length) - 16) + n;
+}
+
+function createDoc(doc) {
+  return { 
+    _id: doc._id || uuid.v4(), 
+    _v: (+new Date()).toString(),
+    ...doc
+  };
+}
+
+function createSchema(schema) {
+  return { 
+    table: schema.table || '', 
+    indexes: schema.indexes || {}
+  };
 }
 
 function docLatestBaseKey(table) {
@@ -70,16 +81,6 @@ function ospKey(o, s, p) {
   return `$l/osp/${o}:${s}:${p}`;
 }
 
-function scanAllDocuments(db, table) {
-  const key = docLatestBaseKey(table);
-  return db.createReadStream({ gte: key, lt: key + '~' });
-}
-
-function scanAllIndexKeys(db, schema, indexName) {
-  const key = indexBaseKey(schema.name, indexName);
-  return db.createKeyStream({ gte: key, lt: key + '~' });
-}
-
 function transformer(fn) {
   return new Transform({ objectMode: true, transform: fn });
 }
@@ -90,15 +91,23 @@ function dropIndex(db, schema, indexName) {
        done(null, { type: 'del', key })));
 }
 
+function scanAllIndexKeys(db, schema, indexName) {
+  const key = indexBaseKey(schema.name, indexName);
+  return db.createKeyStream({ gte: key, lt: key + '~' });
+}
+
 function indexAllDocuments(db, schema, indexes = null) {
   return scanAllDocuments(db, schema.name)
     .pipe(transformer(function (data, enc, done) {
-      const doc = JSON.parse(data.value);
-      if(!doc) return done();
-      indexDocument(db, schema, doc, indexes)
+      indexDocument(db, schema, createDoc(JSON.parse(doc)), indexes)
         .then((ops) => ops.map((op) => this.push(op)))
         .then((ops) => done());
     }));
+}
+
+function scanAllDocuments(db, table) {
+  const key = docLatestBaseKey(table);
+  return db.createReadStream({ gte: key, lt: key + '~' });
 }
 
 async function unindexDocument(db, schema, doc, indexes = null) {
@@ -110,8 +119,8 @@ async function unindexDocument(db, schema, doc, indexes = null) {
 //      are doing the same thing twice and it is a performance hit
 async function indexDocument(db, schema, doc, indexes = null) {
   await validateIndexOp(db, schema, doc, indexes);
-  return (await generateIndexKeys(db, schema, doc, indexes)).map((data) => 
-    ({ type: 'put', ...data }));
+  return (await generateIndexKeys(db, schema, doc, indexes))
+    .map((data) => ({ type: 'put', ...data }));
 }
 
 async function validateIndexOp(db, schema, doc, indexes = null) {
@@ -176,84 +185,58 @@ function tokenize(text) {
 
 function invertedIndexer(db, schema, name, options, doc) {
   return options.fields.map((field) => {
-    let text = jmespath.search(doc, field);
-    if(typeof text !== 'string' && text) {
-      text = JSON.stringify(text);
-    }
-    return tokenize(text || '').map((term) =>
+    return tokenize(stringifyField(doc, field)).map((term) =>
       ({ key: indexKey(schema.name, name, term, doc._id), value: doc._id }));
   });
 }
 
-function migrate(db, p, c) {
+function stringifyField(doc, field) {
+  return JSON.stringify(jmespath.search(doc, field) || '');
+}
+
+async function runMigration(db, p, c) {
+  await runDropStream(db, p, c);
+  await runCreateStream(db, p, c);
+}
+
+function runDropStream(db, p, c) {
   return new Promise((resolve, reject) => {
-    const dropBatch = db.batch();
-    const createBatch = db.batch();
-    const end = async () => {
-      await dropBatch.write();
-      await createBatch.write();
-    };
-    createMigrationStream(db, p, c)
-      .on('error', reject)
-      .on('end', end)
-      .on('close', end)
-      .on('data', (data) => {
-        if(data.type === 'put') {
-          createBatch.put(data.key, data.value);
-        } else if(data.type === 'del') {
-          dropBatch.del(data.key);
-        }  
-      });
+    const batch = db.batch();
+    mergeStream(compareIndices(p, c)
+      .map((index) => dropIndex(db, p, index)))
+      .on('data', data => batch.del(data.key))
+      .on('end', () => resolve(batch.write()))
+      .on('error', reject);
   });
 }
 
-function createMigrationStream(db, p, c) {
-  const streams = mergeStream();
-  const diff = diffSchema(p, c);
-  const create = [];
-
-  diff.forEach((op) =>
-    op.type === 'dropIndex' ?
-      streams.add(dropIndex(db, p, op.index)):
-      create.push(op.index));
-
-  if(create.length) {
-    streams.add(indexAllDocuments(db, c, create));
-  }
-  return streams;
-}
-
-function diffSchema(old, current) {
-  return compareIndices(old, current, 'dropIndex')
-    .concat(compareIndices(current, old, 'createIndex'));
+function runCreateStream(db, p, c) {
+  return new Promise((resolve, reject) => {
+    const batch = db.batch();
+    indexAllDocuments(db, c, compareIndices(c, p))
+      .on('data', data => batch.put(data.key, data.value))
+      .on('end', () => resolve(batch.write()))
+      .on('error', reject);
+  });
 }
 
 function compareIndices(a, b, action) {
   return Object.keys(a.indexes).map((index) => {
-    const ai = a.indexes[index];
-    const bi = b.indexes[index];
-    return !bi || !_.isEqual(ai, bi) ?
-      { type: action, table: a.name, index } : undefined;
+    return !_.isEqual(a.indexes[index], b.indexes[index]) ?
+      index : undefined;
   }).filter(Boolean);
 }
 
 async function putDocument(db, table, doc) {
-  const schema = db.schemas[table];
-  const newDoc = createDocument(db, doc);
-  const json = JSON.stringify(newDoc);
+  const schema = createSchema(db.schemas[table]);
+  const newDoc = createDoc(doc);
+  const value = JSON.stringify(newDoc);
   await db.batch([
     ...await indexDocument(db, schema, newDoc), 
-    { type: 'put', key: docLatestKey(table, newDoc._id), value: json },
-    { type: 'put', key: docKey(table, newDoc._id, newDoc._v), value: json }
+    { type: 'put', key: docLatestKey(table, newDoc._id), value },
+    { type: 'put', key: docKey(table, newDoc._id, newDoc._v), value }
   ]);
   return newDoc._id;
-}
-
-function createDocument(db, doc) {
-  return Object.assign({}, doc || {}, {
-    _id: doc._id || uuid.v4(),
-    _v: (+new Date()).toString()
-  });
 }
 
 async function getDocument(db, table, uuid, version) {
@@ -284,23 +267,7 @@ function queryDocuments(db, query) {
 }
 
 function parseFilter(db, query, filter) {
-  switch(query.filter.type) {
-    case 'union':
-      break;
-    case 'intersection':
-      break;
-    case 'eq':
-    case 'neq':
-    case 'gt':
-    case 'gte':
-    case 'lt':
-    case 'lte':
-    case 'match':
-    case 'search':
-    case 'within':
-    case 'without':
-      return findIndexer(db, query, filter);
-  }
+  return findIndexer(db, query, filter);
 }
 
 function findIndexer(db, query, filter) {
@@ -374,12 +341,8 @@ function docMatch(db, doc, field, value) {
 }
 
 function docSearch(db, doc, field, value) {
-  let text = jmespath.search(doc, field);
-  if(typeof text !== 'string') {
-    text = JSON.stringify(text);
-  }
-  const docTokens = tokenize(text);
-  const valTokens = tokenize(text);
+  const docTokens = tokenize(stringifyField(doc, field));
+  const valTokens = tokenize(value);
   // are vaTokens all inside docTokens?
 }
 
@@ -494,22 +457,7 @@ const userSchema2 = {
   }
 };
 
-const diff = diffSchema(db.schemas.User, userSchema2);
-assert.ok(diff.length === 4);
-assert.ok(diff[0].type === 'dropIndex');
-assert.ok(diff[0].table === 'User');
-assert.ok(diff[0].index === 'email');
-assert.ok(diff[1].type === 'createIndex');
-assert.ok(diff[1].table === 'User');
-assert.ok(diff[1].index === 'email');
-assert.ok(diff[2].type === 'createIndex');
-assert.ok(diff[2].table === 'User');
-assert.ok(diff[2].index === 'tagline');
-assert.ok(diff[3].type === 'createIndex');
-assert.ok(diff[3].table === 'User');
-assert.ok(diff[3].index === 'bio');
-
-const doc = createDocument(db, { title: 'Create' });
+const doc = createDoc(db, { title: 'Create' });
 assert.ok(doc._id);
 assert.ok(doc._v);
 
