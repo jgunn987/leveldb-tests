@@ -6,6 +6,20 @@ const mergeStream = require('merge-stream');
 const { Transform } = require('stream');
 const natural = require('natural');
 const tokenizer = /[\W\d]+/;
+const vm = require('vm');
+const esprima = require('esprima');
+
+// for storing views
+function compareFunctions(a, b) {
+  const ap = esprima.parse(a);
+  const bp = esprima.parse(b);
+  return _.isEqual(ap, bp);
+}
+
+function compileFn(db, fn) {
+  return new vm.Script(fn)
+    .runInContext(db.viewContext);
+}
 
 function tid(n) {
   return +new Date() + ("0000000000000000")
@@ -100,7 +114,7 @@ async function indexDocument(db, schema, doc, indexes = null) {
     ({ type: 'put', ...data }));
 }
 
-async function validateIndexOp(db, schema, doc, indexes) {
+async function validateIndexOp(db, schema, doc, indexes = null) {
   return Promise.all((indexes || Object.keys(schema.indexes)).map(async (name) => { 
     if(schema.indexes[name].unique === true) {
       const keys = await invokeIndexer(db, schema, name, doc);
@@ -255,6 +269,7 @@ async function delDocument(db, table, uuid) {
     { type: 'put', key: docLatestKey(table, doc._id), value: 'null' }
   ]);
 }
+
 function queryDocuments(db, query) {
   const result = parseFilter(db, query, query.filter);
   if(result.type === 'index') {
@@ -531,10 +546,9 @@ Promise.all([
   //createMigrationStream(db, db.schemas['User'], userSchema2)
     //.on('data', console.log);
 });
-/*
 indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com', text: 'one two' })
   .then((keys) => {
-    assert.ok(keys.length === 9);
+    assert.ok(keys.length === 10);
     assert.ok(keys[0].type === 'put');
     assert.ok(keys[0].key === '%User/$i/name:James:1');
     assert.ok(keys[0].value === '1');
@@ -542,4 +556,3 @@ indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn98799
     assert.ok(keys[1].key === '%User/$i/email:jgunn987999@gmail.com');
     assert.ok(keys[1].value === '1');
   });
-  */
