@@ -133,6 +133,19 @@ function transformer(fn) {
   return new Transform({ objectMode: true, transform: fn });
 }
 
+function batchStream(db, stream) {
+  if(stream.hasOwnProperty('isEmpty') && stream.isEmpty()) {
+    return Promise.resolve([]);
+  }
+
+  return new Promise((resolve, reject) => {
+    const batch = [];
+    stream.on('data', data => batch.push(data))
+      .on('end', () => resolve(batch))
+      .on('error', reject);
+  });
+}
+
 function dropIndex(db, schema, indexName) {
   return scanAllIndexKeys(db, schema, indexName)
     .pipe(transformer((key, encoding, done) =>
@@ -141,7 +154,7 @@ function dropIndex(db, schema, indexName) {
 
 function scanAllIndexKeys(db, schema, indexName) {
   const key = indexBaseKey(schema.name, indexName);
-  return db.createKeyStream({ gte: key, lt: key + '~' });
+  return db.db.createKeyStream({ gte: key, lt: key + '~' });
 }
 
 function indexAllDocuments(db, schema, indexes = null) {
@@ -157,7 +170,7 @@ function indexAllDocuments(db, schema, indexes = null) {
 
 function scanAllDocuments(db, table) {
   const key = docLatestBaseKey(table);
-  return db.createReadStream({ gte: key, lt: key + '~' });
+  return db.db.createReadStream({ gte: key, lt: key + '~' });
 }
 
 async function unindexDocument(db, schema, doc, indexes = null) {
@@ -166,18 +179,14 @@ async function unindexDocument(db, schema, doc, indexes = null) {
 }
 
 async function dropAllDocLinks(db, schema, doc) {
-  return new Promise((resolve, reject) => {
-    const batch = [];
+  return batchStream(db,
     getConnectedLinksStreams(db, schema, doc)
       .pipe(transformer(function (data, enc, done) {
         const spo = JSON.parse(data.value);
         createLinkKeys(spo.s, spo.p, spo.o)
           .forEach(key => this.push({ type: 'del', key }));
         done();
-      })).on('error', reject)
-        .on('end', () => resolve(batch))
-        .on('data', data => batch.push(data));
-  });
+      })));
 }
 
 function getConnectedLinksStreams(db, schema, doc) {
@@ -230,7 +239,7 @@ async function validateUniqueKey(db, key, doc) {
     return true;
   }
   if(doc._id !== id)
-    throw new Error(`Duplicate key '${key}'`);
+    throw new Error(`duplicate key '${key}'`);
 }
 
 function generateIndexKeys(db, schema, doc, indexes = null) {
@@ -239,8 +248,8 @@ function generateIndexKeys(db, schema, doc, indexes = null) {
 }
 
 function invokeIndexer(db, schema, name, doc) {
-  return db.indexers[schema.indexes[name].type]
-    (db, schema, name, schema.indexes[name], doc);
+  const indexer = db.indexers[schema.indexes[name].type];
+  return indexer ? indexer(db, schema, name, schema.indexes[name], doc) : [];
 }
 
 function defaultIndexer(db, schema, name, options, doc) {
@@ -261,8 +270,10 @@ function linkIndexer(db, schema, name, options, doc) {
 }
 
 async function runMigration(db, p, c) {
-  await runDropStream(db, p, c);
-  await runCreateStream(db, p, c);
+  return db.db.batch([
+    ...await runDropStream(db, p, c),
+    ...await runCreateStream(db, p, c)
+  ]);
 }
 
 function runDropStream(db, p, c) {
@@ -272,19 +283,6 @@ function runDropStream(db, p, c) {
 
 function runCreateStream(db, p, c) {
   return batchStream(db, indexAllDocuments(db, c, compareIndices(c, p)));
-}
-
-function batchStream(db, stream) {
-  if(stream.hasOwnProperty('isEmpty') && stream.isEmpty()) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    const batch = [];
-    stream.on('data', data => batch.push(data))
-      .on('end', () => resolve(db.batch(batch)))
-      .on('error', reject);
-  });
 }
 
 function compareIndices(a, b, action) {
@@ -475,7 +473,8 @@ class DB extends EventEmitter {
     this.schemas = {};
     this.indexers = {
       default: defaultIndexer,
-      inverted: invertedIndexer
+      inverted: invertedIndexer,
+      link: linkIndexer
     };
     this.init();
   }
@@ -487,14 +486,13 @@ class DB extends EventEmitter {
     this.emit('init');
   }
 
-  // TODO: create checkpoints for migration in the case of failure
   async migrate(schema) {
     const candidate = createSchema(schema);
     const exisiting = createSchema(this.schemas[candidate.name] || {});
     const name = candidate.name;
     
     try {
-      await runMigration(this.db, exisiting, candidate);
+      await runMigration(this, exisiting, candidate);
     } catch(err) {
       throw new Error(`failed to migrate table '${name}'`);
     }
@@ -532,7 +530,6 @@ class DB extends EventEmitter {
     }
   }
 
-  async transaction() {}
   async query(q) {}
 }
 

@@ -15,6 +15,7 @@ const TestSchema1 = {
     testDefault: { type: 'default', fields: ['testDefault'] }
   }
 };
+
 const TestSchema2 = {
   name: 'Test',
   indexes: {
@@ -29,6 +30,22 @@ const TestSchema3 = {
     testDefault: { type: 'default', fields: ['testDefault'] },
     testUnique: { type: 'default', fields: ['testUnique'], unique: true },
     testInverted: { type: 'inverted', fields: ['testInverted'] }
+  }
+};
+
+const TestSchema4 = {
+  name: 'Test',
+  indexes: {
+    testDefault: { type: 'default', fields: ['testDefault'] },
+    testUnique: { type: 'default', fields: ['testUnique'], unique: true },
+    testInverted: { type: 'inverted', fields: ['testInverted'] },
+    testSubIndex: { type: 'link', rel: 'HAS_A', table: 'Test', indexes: {
+      testDefault: { type: 'default', fields: ['testDefault'] },
+      testInverted: { type: 'inverted', fields: ['testInverted'] },
+      testSubIndex: { type: 'link', rel: 'IS_A', table: 'Test', indexes: {
+        testDefault: { type: 'default', fields: ['testDefault'] },
+      }}
+    }}
   }
 };
 
@@ -137,6 +154,9 @@ async function testCreateMigrate() {
   assert.ok(db.schemas['Test']);
   assert.ok(db.metadata.tables.indexOf('Test') !== -1);
   await db.migrate(TestSchema3);
+  assert.ok(db.schemas['Test']);
+  assert.ok(db.metadata.tables.indexOf('Test') !== -1);
+  await db.migrate(TestSchema4);
   assert.ok(db.schemas['Test']);
   assert.ok(db.metadata.tables.indexOf('Test') !== -1);
 }
