@@ -17,6 +17,17 @@ function compileFn(fn, context) {
   return new vm.Script(fn).runInContext(context);
 }
 
+function tokenize(text) {
+  return _.uniq(text.split(tokenizer)
+    .map(token => token.toLowerCase())
+    .map(natural.PorterStemmer.stem)
+    .filter(Boolean));
+}
+
+function stringifyFieldRef(doc, field) {
+  return JSON.stringify(jmespath.search(doc, field) || '');
+}
+
 function tid(n) {
   return +new Date() + ("0000000000000000")
     .substr((16 + n.toString().length) - 16) + n;
@@ -111,8 +122,8 @@ function scanAllDocuments(db, table) {
 }
 
 async function unindexDocument(db, schema, doc, indexes = null) {
-  return (await generateIndexKeys(db, schema, doc, indexes)).map((data) => 
-    ({ type: 'del', ...data }));
+  return (await generateIndexKeys(db, schema, doc, indexes))
+    .map((data) => ({ type: 'del', ...data }));
 }
 
 //TODO: run the validator after indexing has taken place otherwise we
@@ -155,10 +166,16 @@ function invokeIndexer(db, schema, name, doc) {
 }
 
 function defaultIndexer(db, schema, name, options, doc) {
-  return [{ key: indexKey(schema.name, name, 
-    options.fields.map((field) => 
-      jmespath.search(doc, field) || 'NULL').join('&'), 
+  return [{ key: indexKey(schema.name, name, options.fields
+      .map((field) => jmespath.search(doc, field) || 'NULL').join('&'), 
     !options.unique && doc._id), value: doc._id }]; 
+}
+
+function invertedIndexer(db, schema, name, options, doc) {
+  return options.fields.map((field) => {
+    return tokenize(stringifyFieldRef(doc, field)).map((term) =>
+      ({ key: indexKey(schema.name, name, term, doc._id), value: doc._id }));
+  });
 }
 
 function linkIndexer(db, schema, name, options, doc) {
@@ -176,48 +193,27 @@ function linkIndexer(db, schema, name, options, doc) {
   ];
 }
 
-function tokenize(text) {
-  return _.uniq(text.split(tokenizer)
-    .map(token => token.toLowerCase())
-    .map(natural.PorterStemmer.stem)
-    .filter(Boolean));
-}
-
-function invertedIndexer(db, schema, name, options, doc) {
-  return options.fields.map((field) => {
-    return tokenize(stringifyField(doc, field)).map((term) =>
-      ({ key: indexKey(schema.name, name, term, doc._id), value: doc._id }));
-  });
-}
-
-function stringifyField(doc, field) {
-  return JSON.stringify(jmespath.search(doc, field) || '');
-}
-
 async function runMigration(db, p, c) {
   await runDropStream(db, p, c);
   await runCreateStream(db, p, c);
 }
 
-function runDropStream(db, p, c) {
+function batchStream(db, stream) {
   return new Promise((resolve, reject) => {
-    const batch = db.batch();
-    mergeStream(compareIndices(p, c)
-      .map((index) => dropIndex(db, p, index)))
-      .on('data', data => batch.del(data.key))
-      .on('end', () => resolve(batch.write()))
+    const batch = [];
+    stream.on('data', data => batch.push(data))
+      .on('end', () => resolve(db.batch(batch)))
       .on('error', reject);
   });
 }
 
+function runDropStream(db, p, c) {
+  return batchStream(db, mergeStream(compareIndices(p, c)
+    .map((index) => dropIndex(db, p, index))));
+}
+
 function runCreateStream(db, p, c) {
-  return new Promise((resolve, reject) => {
-    const batch = db.batch();
-    indexAllDocuments(db, c, compareIndices(c, p))
-      .on('data', data => batch.put(data.key, data.value))
-      .on('end', () => resolve(batch.write()))
-      .on('error', reject);
-  });
+  return batchStream(indexAllDocuments(db, c, compareIndices(c, p)));
 }
 
 function compareIndices(a, b, action) {
@@ -341,7 +337,7 @@ function docMatch(db, doc, field, value) {
 }
 
 function docSearch(db, doc, field, value) {
-  const docTokens = tokenize(stringifyField(doc, field));
+  const docTokens = tokenize(stringifyFieldRef(doc, field));
   const valTokens = tokenize(value);
   // are vaTokens all inside docTokens?
 }
