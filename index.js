@@ -294,7 +294,7 @@ async function putDocument(db, table, doc) {
   const schema = createSchema(db.schemas[table]);
   const newDoc = createDoc(doc);
   const value = JSON.stringify(newDoc);
-  await db.batch([
+  await db.db.batch([
     ...await indexDocument(db, schema, newDoc), 
     { type: 'put', key: docLatestKey(table, newDoc._id), value },
     { type: 'put', key: docKey(table, newDoc._id, newDoc._v), value }
@@ -460,7 +460,7 @@ async function saveSchema(db, schema) {
       { type: 'put', key: schemaKey(schema.name, schema._v), data }
     ]);
   } catch(err) {
-    throw new Error(`failed to save schema for table ${schema.table}`);
+    throw new Error(`failed to save schema for table '${schema.table}'`);
   }
   return db; 
 }
@@ -471,6 +471,10 @@ class DB extends EventEmitter {
     this.db = db;
     this.metadata = {};
     this.schemas = {};
+    this.indexers = {
+      default: defaultIndexer,
+      inverted: invertedIndexer
+    };
     this.init();
   }
 
@@ -490,7 +494,7 @@ class DB extends EventEmitter {
     try {
       await runMigration(this.db, exisiting, candidate);
     } catch(err) {
-      throw new Error(`failed to migrate table ${name}`);
+      throw new Error(`failed to migrate table '${name}'`);
     }
 
     await saveSchema(this, candidate);
@@ -500,10 +504,17 @@ class DB extends EventEmitter {
     return saveMetadata(this);
   }
 
-
   async transaction() {}
   async get(table, id, version = null) {}
-  async put(table, doc) {}
+  
+  async put(table, doc) {
+    try {
+      return putDocument(this, table, doc);
+    } catch(err) {
+      throw new Error(`unable to save document to table '${table}'`);
+    }
+  }
+
   async del(table, id) {}
   async query(q) {}
 }
