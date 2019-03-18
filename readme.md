@@ -80,6 +80,10 @@ $l/pos/{predicate}-{object.uuid}-{subject.uuid} => {spo} |
 $l/ops/{object.uuid}-{predicate}-{subject.uuid} => {spo} | 
 $l/osp/{object.uuid}-{subject.uuid}-{predicate} => {spo} |
 
+
+support query functions e.g
+q.fn('abs', value)
+
 ```javascript
 function testOrQuery() {
   return query('Entity')
