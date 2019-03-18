@@ -73,12 +73,12 @@ compound indexes     | %{table.name}/$i/{index.name}:{field1.name}={field1.value
 links                | %{table.name}/$@/{subject.uuid}:{subject.predicate}/$i/{index.name}:{field.name}{field.value}:{doc.uuid} | @{doc.uuid}
 
 graph links
-$l/sop/{subject.uuid}-{object.uuid}-{predicate} => {spo} |
-$l/spo/{subject.uuid}-{predicate}-{object.uuid} => {spo} |
-$l/pso/{predicate}-{subject.uuid}-{object.uuid} => {spo} |
-$l/pos/{predicate}-{object.uuid}-{subject.uuid} => {spo} |
-$l/ops/{object.uuid}-{predicate}-{subject.uuid} => {spo} | 
-$l/osp/{object.uuid}-{subject.uuid}-{predicate} => {spo} |
+@sop/{subject.uuid}-{object.uuid}-{predicate} => {spo} |
+@spo/{subject.uuid}-{predicate}-{object.uuid} => {spo} |
+@pso/{predicate}-{subject.uuid}-{object.uuid} => {spo} |
+@pos/{predicate}-{object.uuid}-{subject.uuid} => {spo} |
+@ops/{object.uuid}-{predicate}-{subject.uuid} => {spo} | 
+@osp/{object.uuid}-{subject.uuid}-{predicate} => {spo} |
 
 
 support query functions e.g
