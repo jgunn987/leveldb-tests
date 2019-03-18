@@ -1,3 +1,4 @@
+const _ = require('lodash');
 const level = require('level');
 const assert = require('assert');
 const dbm = require('.');
@@ -113,8 +114,11 @@ db.once('init', runAll);
 
 async function runAll() {
   await testInit();
-  await testInitialMigrate();
+  await testCreateMigrate();
   await testPut();
+  await testGet();
+  await testDel();
+  await testDropMigrate();
   db.db.createKeyStream()
     .on('data', console.log);
 }
@@ -125,7 +129,7 @@ async function testInit() {
   assert.ok(db.metadata.tables.length === 0);
 }
 
-async function testInitialMigrate() {
+async function testCreateMigrate() {
   await db.migrate(TestSchema1);
   assert.ok(db.schemas['Test']);
   assert.ok(db.metadata.tables.indexOf('Test') !== -1);
@@ -135,9 +139,6 @@ async function testInitialMigrate() {
   await db.migrate(TestSchema3);
   assert.ok(db.schemas['Test']);
   assert.ok(db.metadata.tables.indexOf('Test') !== -1);
-  //await db.migrate(TestSchemaNull);
-  //assert.ok(db.schemas['Test']);
-  //assert.ok(db.metadata.tables.indexOf('Test') !== -1);
 }
 
 let id1, id2, id3, id4, id5, id6;
@@ -157,3 +158,65 @@ async function testPut() {
   assert.ok(id6);
 }
 
+async function testGet() {
+  const doc1 = await db.get('Test', id1);
+  assert.ok(doc1._id);
+  assert.ok(doc1.testDefault === testDocument1.testDefault);
+  assert.ok(doc1.testUnique === testDocument1.testUnique);
+  assert.ok(doc1.testInverted === testDocument1.testInverted);
+  const doc2 = await db.get('Test', id2);
+  assert.ok(doc2._id);
+  assert.ok(doc2.testDefault === testDocument2.testDefault);
+  assert.ok(doc2.testUnique === testDocument2.testUnique);
+  assert.ok(doc2.testInverted === testDocument2.testInverted);
+  const doc3 = await db.get('Test', id3);
+  assert.ok(doc3._id);
+  assert.ok(doc3.testDefault === testDocument3.testDefault);
+  assert.ok(doc3.testUnique === testDocument3.testUnique);
+  assert.ok(doc3.testInverted === testDocument3.testInverted);
+  const doc4 = await db.get('Test', id4);
+  assert.ok(doc4._id);
+  assert.ok(doc4.testDefault === testDocument4.testDefault);
+  assert.ok(doc4.testUnique === testDocument4.testUnique);
+  assert.ok(doc4.testInverted === testDocument4.testInverted);
+  const doc5 = await db.get('Test', id5);
+  assert.ok(doc5._id);
+  assert.ok(doc5.testDefault === testDocument5.testDefault);
+  assert.ok(doc5.testUnique === testDocument5.testUnique);
+  assert.ok(doc5.testInverted === testDocument5.testInverted);
+  const doc6 = await db.get('Test', id6);
+  assert.ok(doc6._id);
+  assert.ok(doc6.testDefault === testDocument6.testDefault);
+  assert.ok(doc6.testUnique === testDocument6.testUnique);
+  assert.ok(doc6.testInverted === testDocument6.testInverted);
+}
+
+async function testGetAfterDelete(table, id) {
+  try {
+    console.log(await db.get(table, id));
+  } catch(err) {
+    return assert.ok(err);
+  }
+  return assert.fail();
+}
+
+async function testDel() {
+  await db.del('Test', id1);
+  await db.del('Test', id2);
+  await db.del('Test', id3);
+  await db.del('Test', id4);
+  await db.del('Test', id5);
+  await db.del('Test', id6);
+  testGetAfterDelete('Test', id1);
+  testGetAfterDelete('Test', id2);
+  testGetAfterDelete('Test', id3);
+  testGetAfterDelete('Test', id4);
+  testGetAfterDelete('Test', id5);
+  testGetAfterDelete('Test', id6);
+}
+
+async function testDropMigrate() {
+  await db.migrate(TestSchemaNull);
+  assert.ok(db.schemas['Test']);
+  assert.ok(db.metadata.tables.indexOf('Test') !== -1);
+}

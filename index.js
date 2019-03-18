@@ -147,7 +147,9 @@ function scanAllIndexKeys(db, schema, indexName) {
 function indexAllDocuments(db, schema, indexes = null) {
   return scanAllDocuments(db, schema.name)
     .pipe(transformer(function (data, enc, done) {
-      indexDocument(db, schema, createDoc(JSON.parse(doc)), indexes)
+      const value = JSON.parse(data.value);
+      if(!value) return done();
+      indexDocument(db, schema, createDoc(value), indexes)
         .then(ops => ops.map(op => this.push(op)))
         .then(ops => done());
     }));
@@ -166,14 +168,14 @@ async function unindexDocument(db, schema, doc, indexes = null) {
 async function dropAllDocLinks(db, schema, doc) {
   return new Promise((resolve, reject) => {
     const batch = [];
-    getConnectedLinksStream(db, schema, doc)
+    getConnectedLinksStreams(db, schema, doc)
       .pipe(transformer(function (data, enc, done) {
         const spo = JSON.parse(data.value);
         createLinkKeys(spo.s, spo.p, spo.o)
           .forEach(key => this.push({ type: 'del', key }));
         done();
       })).on('error', reject)
-        .on('end', resolve(batch))
+        .on('end', () => resolve(batch))
         .on('data', data => batch.push(data));
   });
 }
@@ -186,7 +188,7 @@ function getConnectedLinksStreams(db, schema, doc) {
 
 function getLinkStream(db, schema, doc, register) {
   const key = '@' + register + '/' + schema.name + ':' + doc._id;
-  return db.createReadStream({ gte: key, lte: key + '~' });
+  return db.db.createReadStream({ gte: key, lte: key + '~' });
 }
 
 //TODO: run the validator after indexing has taken place otherwise we
@@ -304,13 +306,13 @@ async function putDocument(db, table, doc) {
 
 async function getDocument(db, table, uuid, version) {
   return JSON.parse(version ?
-    await db.get(docKey(table, uuid, version)):
-    await db.get(docLatestKey(table, uuid)));
+    await db.db.get(docKey(table, uuid, version)):
+    await db.db.get(docLatestKey(table, uuid)));
 }
 
 async function delDocument(db, table, uuid) {
   const doc = await getDocument(db, table, uuid);
-  return await db.batch([
+  return await db.db.batch([
     ...await unindexDocument(db, db.schemas[table], doc), 
     ...await dropAllDocLinks(db, db.schemas[table], doc),
     { type: 'put', key: docLatestKey(table, doc._id), value: 'null' }
@@ -504,8 +506,15 @@ class DB extends EventEmitter {
     return saveMetadata(this);
   }
 
-  async transaction() {}
-  async get(table, id, version = null) {}
+  async get(table, id, version = null) {
+    try {
+      const value = await getDocument(this, table, id, version);
+      if(!value) throw value;
+      return value;
+    } catch (err) {
+      throw new Error(`unable to find document by id '${id}' from table '${table}'`);
+    }
+  }
   
   async put(table, doc) {
     try {
@@ -515,7 +524,15 @@ class DB extends EventEmitter {
     }
   }
 
-  async del(table, id) {}
+  async del(table, id) {
+    try {
+      return delDocument(this, table, id);
+    } catch(err) {
+      throw new Error(`unable to delete document with id '${id}' from table '${table}'`);
+    }
+  }
+
+  async transaction() {}
   async query(q) {}
 }
 
