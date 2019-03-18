@@ -44,12 +44,12 @@ function createDoc(doc) {
 
 function createSchema(schema) {
   return { 
-    table: schema.table || '', 
+    name: schema.name || '', 
     indexes: schema.indexes || {}
   };
 }
 
-function createLinkKeys(s, p, o, data) {
+function createLinkOps(s, p, o, data) {
   const spo = JSON.stringify({ s, p, o, ...data });
   return [
     { key: sopKey(s, o, p), value: spo },
@@ -58,6 +58,17 @@ function createLinkKeys(s, p, o, data) {
     { key: posKey(p, o, s), value: spo },
     { key: opsKey(o, p, s), value: spo }, 
     { key: ospKey(o, s, p), value: spo }
+  ];
+}
+
+function createLinkKeys(s, p, o) {
+  return [
+    sopKey(s, o, p),
+    spoKey(s, p, o),
+    psoKey(p, s, o),
+    posKey(p, o, s),
+    opsKey(o, p, s),
+    ospKey(o, s, p)
   ];
 }
 
@@ -82,27 +93,27 @@ function indexKey(table, indexName, value, uuid) {
 }
 
 function sopKey(s, o, p) {
-  return `@sop/${s}:${o}:${p}`;
+  return `@sop/${s}-${o}-${p}`;
 }
 
 function spoKey(s, p, o) {
-  return `@spo/${s}:${p}:${o}`;
+  return `@spo/${s}-${p}-${o}`;
 }
 
 function psoKey(p, s, o) {
-  return `@pso/${p}:${s}:${o}`;
+  return `@pso/${p}-${s}-${o}`;
 }
 
 function posKey(p, o, s) {
-  return `@pos/${p}:${o}:${s}`;
+  return `@pos/${p}-${o}-${s}`;
 }
 
 function opsKey(o, p, s) {
-  return `@ops/${o}:${p}:${s}`;
+  return `@ops/${o}-${p}-${s}`;
 }
 
 function ospKey(o, s, p) {
-  return `@osp/${o}:${s}:${p}`;
+  return `@osp/${o}-${s}-${p}`;
 }
 
 function transformer(fn) {
@@ -139,6 +150,28 @@ async function unindexDocument(db, schema, doc, indexes = null) {
     .map(data => ({ type: 'del', ...data }));
 }
 
+async function dropAllDocLinks(db, schema, doc) {
+  return new Promise((resolve, reject) => {
+    const batch = [];
+    mergeStream(
+      getLinkStream(db, schema, doc, 'spo'),
+      getLinkStream(db, schema, doc, 'ops'))
+      .pipe(transformer(function (data, enc, done) {
+        const spo = JSON.parse(data.value);
+        createLinkKeys(spo.s, spo.p, spo.o)
+          .forEach(key => this.push({ type: 'del', key }));
+        done();
+      })).on('error', reject)
+        .on('end', resolve(batch))
+        .on('data', data => batch.push(data));
+  });
+}
+
+function getLinkStream(db, schema, doc, register) {
+  const key = '@' + register + '/' + schema.name + ':' + doc._id;
+  return db.createReadStream({ gte: key, lte: key + '~' });
+}
+
 //TODO: run the validator after indexing has taken place otherwise we
 //      are doing the same thing twice and it is a performance hit
 async function indexDocument(db, schema, doc, indexes = null) {
@@ -156,7 +189,7 @@ function indexDocumentLinks(db, schema, doc) {
 function indexDocumentOpLinks(db, schema, doc, type) {
   return _.flatten(doc.$links[type].map(link => 
     link[0] && link[1] ? 
-      createLinkKeys(doc._id, link[0], link[1])
+      createLinkOps(schema.name + ':' + doc._id, link[0], link[1])
         .map(key => ({ type, ...key })) : undefined));
 }
 
@@ -209,7 +242,7 @@ function linkIndexer(db, schema, name, options, doc) {
   const p = options.rel;
   const o = 'object._id';
   return [];
-  return createLinkKeys(s, p, o);
+  return createLinkOps(s, p, o);
 }
 
 async function runMigration(db, p, c) {
@@ -236,10 +269,8 @@ function batchStream(db, stream) {
 }
 
 function compareIndices(a, b, action) {
-  return Object.keys(a.indexes).map(index => {
-    return !_.isEqual(a.indexes[index], b.indexes[index]) ?
-      index : undefined;
-  }).filter(Boolean);
+  return Object.keys(a.indexes).map(index =>
+    !_.isEqual(a.indexes[index], b.indexes[index]) && index).filter(Boolean);
 }
 
 async function putDocument(db, table, doc) {
@@ -264,6 +295,7 @@ async function delDocument(db, table, uuid) {
   const doc = await getDocument(db, table, uuid);
   return await db.batch([
     ...await unindexDocument(db, db.schemas[table], doc), 
+    ...await dropAllDocLinks(db, db.schemas[table], doc),
     { type: 'put', key: docLatestKey(table, doc._id), value: 'null' }
   ]);
 }
