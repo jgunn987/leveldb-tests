@@ -49,6 +49,18 @@ function createSchema(schema) {
   };
 }
 
+function createLinkKeys(s, p, o, data) {
+  const spo = JSON.stringify({ s, p, o, ...data });
+  return [
+    { key: sopKey(s, o, p), value: spo },
+    { key: spoKey(s, p, o), value: spo },
+    { key: psoKey(p, s, o), value: spo }, 
+    { key: posKey(p, o, s), value: spo },
+    { key: opsKey(o, p, s), value: spo }, 
+    { key: ospKey(o, s, p), value: spo }
+  ];
+}
+
 function docLatestBaseKey(table) {
   return `%${table}/$latest`;
 }
@@ -143,8 +155,9 @@ function indexDocumentLinks(db, schema, doc) {
 
 function indexDocumentOpLinks(db, schema, doc, type) {
   return _.flatten(doc.$links[type].map(link => 
-    createLinkKeys(doc._id, link[0], link[1])
-      .map(key => ({ type, ...key }))));
+    link[0] && link[1] ? 
+      createLinkKeys(doc._id, link[0], link[1])
+        .map(key => ({ type, ...key })) : undefined));
 }
 
 async function validateIndexOp(db, schema, doc, indexes = null) {
@@ -199,30 +212,9 @@ function linkIndexer(db, schema, name, options, doc) {
   return createLinkKeys(s, p, o);
 }
 
-function createLinkKeys(s, p, o) {
-  const spo = JSON.stringify({ s, p, o });
-  return [
-    { key: sopKey(s, o, p), value: spo },
-    { key: spoKey(s, p, o), value: spo },
-    { key: psoKey(p, s, o), value: spo }, 
-    { key: posKey(p, o, s), value: spo },
-    { key: opsKey(o, p, s), value: spo }, 
-    { key: ospKey(o, s, p), value: spo }
-  ];
-}
-
 async function runMigration(db, p, c) {
   await runDropStream(db, p, c);
   await runCreateStream(db, p, c);
-}
-
-function batchStream(db, stream) {
-  return new Promise((resolve, reject) => {
-    const batch = [];
-    stream.on('data', data => batch.push(data))
-      .on('end', () => resolve(db.batch(batch)))
-      .on('error', reject);
-  });
 }
 
 function runDropStream(db, p, c) {
@@ -232,6 +224,15 @@ function runDropStream(db, p, c) {
 
 function runCreateStream(db, p, c) {
   return batchStream(indexAllDocuments(db, c, compareIndices(c, p)));
+}
+
+function batchStream(db, stream) {
+  return new Promise((resolve, reject) => {
+    const batch = [];
+    stream.on('data', data => batch.push(data))
+      .on('end', () => resolve(db.batch(batch)))
+      .on('error', reject);
+  });
 }
 
 function compareIndices(a, b, action) {
@@ -267,32 +268,7 @@ async function delDocument(db, table, uuid) {
   ]);
 }
 
-function queryDocuments(db, query) {
-  const result = parseFilter(db, query, query.filter);
-  if(result.type === 'index') {
-    // TODO
-  } else {
-    return scanAllDocuments(db, query.table)
-      .pipe(transformer((data, enc, done) => {
-        const doc = JSON.parse(data.value);
-        if(!doc) return done();
-      }));
-  }
-}
-
-function parseFilter(db, query, filter) {
-  return findIndexer(db, query, filter);
-}
-
-function findIndexer(db, query, filter) {
-  const indexer = db.filters[filter.type];
-  const indexes = db.schemas[query.table].indexes;
-  const indexName = Object.keys(indexes).find(name => 
-    indexes[name].fields[0] === filter.field);
-  return indexName ?
-    { type: 'index', indexer: indexer[1] }:
-    { type: 'scan', indexer: indexer[0] };
-}
+function queryDocuments(db, query) {}
 
 function docEq(db, doc, field, value) {
   return Promise.resolve(jmespath.search(doc, field) === value);
