@@ -37,6 +37,7 @@ function createDoc(doc) {
   return { 
     _id: doc._id || uuid.v4(), 
     _v: (+new Date()).toString(),
+    $links: doc.$links || { put: [], del: [] },
     ...doc
   };
 }
@@ -111,8 +112,8 @@ function indexAllDocuments(db, schema, indexes = null) {
   return scanAllDocuments(db, schema.name)
     .pipe(transformer(function (data, enc, done) {
       indexDocument(db, schema, createDoc(JSON.parse(doc)), indexes)
-        .then((ops) => ops.map((op) => this.push(op)))
-        .then((ops) => done());
+        .then(ops => ops.map(op => this.push(op)))
+        .then(ops => done());
     }));
 }
 
@@ -123,7 +124,7 @@ function scanAllDocuments(db, table) {
 
 async function unindexDocument(db, schema, doc, indexes = null) {
   return (await generateIndexKeys(db, schema, doc, indexes))
-    .map((data) => ({ type: 'del', ...data }));
+    .map(data => ({ type: 'del', ...data }));
 }
 
 //TODO: run the validator after indexing has taken place otherwise we
@@ -131,14 +132,26 @@ async function unindexDocument(db, schema, doc, indexes = null) {
 async function indexDocument(db, schema, doc, indexes = null) {
   await validateIndexOp(db, schema, doc, indexes);
   return (await generateIndexKeys(db, schema, doc, indexes))
-    .map((data) => ({ type: 'put', ...data }));
+    .map((data) => ({ type: 'put', ...data }))
+    .concat(indexDocumentLinks(db, schema, doc));
+}
+
+function indexDocumentLinks(db, schema, doc) {
+  return indexDocumentOpLinks(db, schema, doc, 'put')
+    .concat(indexDocumentOpLinks(db, schema, doc, 'del'));
+}
+
+function indexDocumentOpLinks(db, schema, doc, type) {
+  return _.flatten(doc.$links[type].map(link => 
+    createLinkKeys(doc._id, link[0], link[1])
+      .map(key => ({ type, ...key }))));
 }
 
 async function validateIndexOp(db, schema, doc, indexes = null) {
-  return Promise.all((indexes || Object.keys(schema.indexes)).map(async (name) => { 
+  return Promise.all((indexes || Object.keys(schema.indexes)).map(async name => { 
     if(schema.indexes[name].unique === true) {
       const keys = await invokeIndexer(db, schema, name, doc);
-      return Promise.all(keys.map(async (data) => 
+      return Promise.all(keys.map(async data => 
         validateUniqueKey(db, data.key, doc)));
     }
   }));
@@ -156,7 +169,7 @@ async function validateUniqueKey(db, key, doc) {
 }
 
 function generateIndexKeys(db, schema, doc, indexes = null) {
-  return Promise.all((indexes || Object.keys(schema.indexes)).map((name) => 
+  return Promise.all((indexes || Object.keys(schema.indexes)).map(name => 
     invokeIndexer(db, schema, name, doc))).then(_.flattenDeep);
 }
 
@@ -167,21 +180,26 @@ function invokeIndexer(db, schema, name, doc) {
 
 function defaultIndexer(db, schema, name, options, doc) {
   return [{ key: indexKey(schema.name, name, options.fields
-      .map((field) => jmespath.search(doc, field) || 'NULL').join('&'), 
+      .map(field => jmespath.search(doc, field) || 'NULL').join('&'), 
     !options.unique && doc._id), value: doc._id }]; 
 }
 
 function invertedIndexer(db, schema, name, options, doc) {
-  return options.fields.map((field) => {
-    return tokenize(stringifyFieldRef(doc, field)).map((term) =>
+  return options.fields.map(field => {
+    return tokenize(stringifyFieldRef(doc, field)).map(term =>
       ({ key: indexKey(schema.name, name, term, doc._id), value: doc._id }));
   });
 }
 
 function linkIndexer(db, schema, name, options, doc) {
   const s = doc._id;
-  const p = options.fields[0];
+  const p = options.rel;
   const o = 'object._id';
+  return [];
+  return createLinkKeys(s, p, o);
+}
+
+function createLinkKeys(s, p, o) {
   const spo = JSON.stringify({ s, p, o });
   return [
     { key: sopKey(s, o, p), value: spo },
@@ -209,7 +227,7 @@ function batchStream(db, stream) {
 
 function runDropStream(db, p, c) {
   return batchStream(db, mergeStream(compareIndices(p, c)
-    .map((index) => dropIndex(db, p, index))));
+    .map(index => dropIndex(db, p, index))));
 }
 
 function runCreateStream(db, p, c) {
@@ -217,7 +235,7 @@ function runCreateStream(db, p, c) {
 }
 
 function compareIndices(a, b, action) {
-  return Object.keys(a.indexes).map((index) => {
+  return Object.keys(a.indexes).map(index => {
     return !_.isEqual(a.indexes[index], b.indexes[index]) ?
       index : undefined;
   }).filter(Boolean);
@@ -269,7 +287,7 @@ function parseFilter(db, query, filter) {
 function findIndexer(db, query, filter) {
   const indexer = db.filters[filter.type];
   const indexes = db.schemas[query.table].indexes;
-  const indexName = Object.keys(indexes).find((name) => 
+  const indexName = Object.keys(indexes).find(name => 
     indexes[name].fields[0] === filter.field);
   return indexName ?
     { type: 'index', indexer: indexer[1] }:
@@ -345,7 +363,7 @@ function docSearch(db, doc, field, value) {
 // add a match all or match any option
 function indexSearch(db, index, values) {
   const key = index + ':';
-  return mergeStream(...tokenize(values).map((token) =>
+  return mergeStream(...tokenize(values).map(token =>
     db.createReadStream({ gte: key + token, lte: key + token })));
 }
 
@@ -433,7 +451,7 @@ db.schemas.User = {
     name: { type: 'default', fields: ['name'] },
     email: { type: 'default', fields: ['email'], unique: true },
     text: { type: 'inverted', fields: ['text'] },
-    friends: { type: 'link', fields: ['friends'], table: 'User', indexes: [
+    friends: { type: 'link', rel: 'friends', table: 'User', indexes: [
       'name', 'text'
     ] }
   }
@@ -447,7 +465,7 @@ const userSchema2 = {
     tagline: { type: 'default', fields: ['tagline'] },
     bio: { type: 'inverted', fields: ['bio'] },
     text: { type: 'inverted', fields: ['text'] },
-    friends: { type: 'link', fields: ['friends'], table: 'User', indexes: [
+    friends: { type: 'link', rel: 'friends', table: 'User', indexes: [
       'name', 'text'
     ] }
   }
@@ -457,14 +475,22 @@ const doc = createDoc(db, { title: 'Create' });
 assert.ok(doc._id);
 assert.ok(doc._v);
 
+const $links = {
+  put: [
+    ['has', 'Comment:1'],
+  ],
+  del: [
+    ['has', 'Car:2']
+  ]
+}
 Promise.all([
-  putDocument(db, 'User', { name: 'Jameson', email: 'jgunn987@gmail.com' }),
-  putDocument(db, 'User', { name: 'Jameson1', email: 'jgunn987@gmail.com1' }),
-  putDocument(db, 'User', { name: 'Jameson2', email: 'jgunn987@gmail.com2' }),
-  putDocument(db, 'User', { name: 'Jameson3', email: 'jgunn987@gmail.com3' }),
-  putDocument(db, 'User', { name: 'Jameson4', email: 'jgunn987@gmail.com4' }),
-  putDocument(db, 'User', { name: 'Jameson5', email: 'jgunn987@gmail.com5' }),
-  putDocument(db, 'User', { name: 'Jameson6', email: 'jgunn987@gmail.com6' }),
+  putDocument(db, 'User', { name: 'Jameson', email: 'jgunn987@gmail.com', $links }),
+  putDocument(db, 'User', { name: 'Jameson1', email: 'jgunn987@gmail.com1', $links }),
+  putDocument(db, 'User', { name: 'Jameson2', email: 'jgunn987@gmail.com2', $links }),
+  putDocument(db, 'User', { name: 'Jameson3', email: 'jgunn987@gmail.com3', $links }),
+  putDocument(db, 'User', { name: 'Jameson4', email: 'jgunn987@gmail.com4', $links }),
+  putDocument(db, 'User', { name: 'Jameson5', email: 'jgunn987@gmail.com5', $links }),
+  putDocument(db, 'User', { name: 'Jameson6', email: 'jgunn987@gmail.com6', $links }),
 ]).then(async (ids) => {
   const newDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(newDoc._id === ids[0]);
@@ -474,11 +500,13 @@ Promise.all([
   const versionDoc = await getDocument(db, 'User', ids[0], newDoc._v);
   assert.ok(_.isEqual(newDoc, versionDoc));
   const indexes = await indexDocument(db, db.schemas['User'], versionDoc);
-  assert.ok(indexes.length === 8);
+  assert.ok(indexes.length === 14);
   await delDocument(db, 'User', ids[0]);
   const delDoc = await getDocument(db, 'User', ids[0]);
   assert.ok(!delDoc);
   
+  //db.createKeyStream().on('data', console.log);
+  /*
   queryDocuments(db, { 
     table: 'User', 
     filter: { 
@@ -486,10 +514,11 @@ Promise.all([
     }
   })
   //.on('data', console.log);
-  
+  */
   //createMigrationStream(db, db.schemas['User'], userSchema2)
     //.on('data', console.log);
 });
+/*
 indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com', text: 'one two' })
   .then((keys) => {
     assert.ok(keys.length === 10);
@@ -500,3 +529,4 @@ indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn98799
     assert.ok(keys[1].key === '%User/$i/email:jgunn987999@gmail.com');
     assert.ok(keys[1].value === '1');
   });
+  */
