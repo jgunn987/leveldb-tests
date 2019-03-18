@@ -223,7 +223,7 @@ async function validateIndexOp(db, schema, doc, indexes = null) {
 async function validateUniqueKey(db, key, doc) {
   let id;
   try {
-    id = await db.get(key);
+    id = await db.db.get(key);
   } catch (err) {
     return true;
   }

@@ -33,7 +33,7 @@ const TestSchema3 = {
 
 const testDocument1 = {
   testDefault: 'testDefaultValue',
-  testUnique: 'testUniqueValue',
+  testUnique: 'testUniqueValue1',
   testInverted: 'testInvertedValue on off',
   extra: {
     level1: [1, 2, 3],
@@ -45,7 +45,7 @@ const testDocument1 = {
 
 const testDocument2 = {
   testDefault: 'testDefaultValue',
-  testUnique: 'testUniqueValue',
+  testUnique: 'testUniqueValue2',
   testInverted: 'testInvertedValue on off',
   extra: {
     level1: [1, 2, 3],
@@ -57,7 +57,7 @@ const testDocument2 = {
 
 const testDocument3 = {
   testDefault: 'testDefaultValue',
-  testUnique: 'testUniqueValue',
+  testUnique: 'testUniqueValue3',
   testInverted: 'testInvertedValue on off',
   extra: {
     level1: [1, 3, 3],
@@ -69,7 +69,7 @@ const testDocument3 = {
 
 const testDocument4 = {
   testDefault: 'testDefaultValue',
-  testUnique: 'testUniqueValue',
+  testUnique: 'testUniqueValue4',
   testInverted: 'testInvertedValue on off',
   extra: {
     level1: [1, 4, 3],
@@ -81,7 +81,7 @@ const testDocument4 = {
 
 const testDocument5 = {
   testDefault: 'testDefaultValue',
-  testUnique: 'testUniqueValue',
+  testUnique: 'testUniqueValue5',
   testInverted: 'testInvertedValue on off',
   extra: {
     level1: [1, 5, 3],
@@ -93,13 +93,19 @@ const testDocument5 = {
 
 const testDocument6 = {
   testDefault: 'testDefaultValue',
-  testUnique: 'testUniqueValue',
+  testUnique: 'testUniqueValue6',
   testInverted: 'testInvertedValue on off',
   extra: {
     level1: [1, 6, 3],
     level2: {
       value: 'string6'
     }
+  },
+  $links: {
+    put: [
+      ['owns', 'Car:1']
+    ],
+    del: []
   }
 };
 
@@ -126,16 +132,28 @@ async function testInitialMigrate() {
   await db.migrate(TestSchema2);
   assert.ok(db.schemas['Test']);
   assert.ok(db.metadata.tables.indexOf('Test') !== -1);
+  await db.migrate(TestSchema3);
+  assert.ok(db.schemas['Test']);
+  assert.ok(db.metadata.tables.indexOf('Test') !== -1);
   //await db.migrate(TestSchemaNull);
   //assert.ok(db.schemas['Test']);
   //assert.ok(db.metadata.tables.indexOf('Test') !== -1);
 }
 
+let id1, id2, id3, id4, id5, id6;
+
 async function testPut() {
-  await db.put('Test', testDocument1);
-  //await db.put('Test', testDocument2);
-  //await db.put('Test', testDocument3);
-  //await db.put('Test', testDocument4);
-  //await db.put('Test', testDocument5);
-  //await db.put('Test', testDocument6);
+  id1 = await db.put('Test', testDocument1);
+  id2 = await db.put('Test', testDocument2);
+  id3 = await db.put('Test', testDocument3);
+  id4 = await db.put('Test', testDocument4);
+  id5 = await db.put('Test', testDocument5);
+  id6 = await db.put('Test', testDocument6);
+  assert.ok(id1);
+  assert.ok(id2);
+  assert.ok(id3);
+  assert.ok(id4);
+  assert.ok(id5);
+  assert.ok(id6);
 }
+
