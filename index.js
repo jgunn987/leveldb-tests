@@ -417,6 +417,54 @@ function indexWithout(db, index, start, end) {
   }));
 }
 
+async function loadMetadata(db) {
+  try {
+    db.metadata = JSON.parse(await db.db.get(metadataKey()));
+  } catch (err) {
+    db.metadata = { tables: [] };
+  }
+  return db;
+}
+
+async function saveMetadata(db) {
+  try {
+    await db.db.put(metadataKey(),
+      JSON.stringify(db.metadata));
+  } catch (err) {
+    throw new Error(`could not save system metadata`);
+  }
+  return db;
+}
+
+async function loadSchemas(db) {
+  db.metadata.tables.forEach(async t =>
+    await db.loadSchema(db, t));
+  return db;
+}
+
+async function loadSchema(db, table) {
+  try {
+    db.schemas[table] = 
+      JSON.parse(await db.db.get(schemaLatestKey(table)));
+  } catch (err) {
+    throw new Error(`schema not found for table '${t}'`);
+  }
+  return db; 
+}
+
+async function saveSchema(db, schema) {
+  try {
+    const data = JSON.stringify(schema);
+    await db.db.batch([
+      { type: 'put', key: schemaLatestKey(schema.name), data },
+      { type: 'put', key: schemaKey(schema.name, schema._v), data }
+    ]);
+  } catch(err) {
+    throw new Error(`failed to save schema for table ${schema.table}`);
+  }
+  return db; 
+}
+
 class DB extends EventEmitter {
   constructor(db) {
     super();
@@ -427,45 +475,10 @@ class DB extends EventEmitter {
   }
 
   async init() {
-    await this.loadMetadata();
-    await this.loadSchemas();
-    await this.saveMetadata();
+    await loadMetadata(this);
+    await loadSchemas(this);
+    await saveMetadata(this);
     this.emit('init');
-  }
-
-  async loadMetadata() {
-    try {
-      this.metadata = JSON.parse(await this.db.get(metadataKey()));
-    } catch (err) {
-      this.metadata = { tables: [] };
-    }
-    return this;
-  }
-
-  async saveMetadata() {
-    try {
-      await this.db.put(metadataKey(),
-        JSON.stringify(this.metadata));
-    } catch (err) {
-      throw new Error(`could not save system metadata`);
-    }
-    return this;
-  }
-
-  async loadSchemas() {
-    this.metadata.tables.forEach(async t =>
-      await this.loadSchema(t));
-    return this;
-  }
-
-  async loadSchema(table) {
-    try {
-      this.schemas[table] = 
-        JSON.parse(await this.db.get(schemaLatestKey(table)));
-    } catch (err) {
-      throw new Error(`schema not found for table '${t}'`);
-    }
-    return this; 
   }
 
   // TODO: create checkpoints for migration in the case of failure
@@ -480,25 +493,13 @@ class DB extends EventEmitter {
       throw new Error(`failed to migrate table ${name}`);
     }
 
-    await this.saveSchema(candidate);
+    await saveSchema(this, candidate);
     this.schemas[name] = candidate;
     this.metadata.tables.push(name);
     this.metadata.tables = _.uniq(this.metadata.tables);
-    return this.saveMetadata();
+    return saveMetadata(this);
   }
 
-  async saveSchema(schema) {
-    try {
-      const data = JSON.stringify(schema);
-      await this.db.batch([
-        { type: 'put', key: schemaLatestKey(schema.name), data },
-        { type: 'put', key: schemaKey(schema.name, schema._v), data }
-      ]);
-    } catch(err) {
-      throw new Error(`failed to save schema for table ${schema.table}`);
-    }
-    return this; 
-  }
 
   async transaction() {}
   async get(table, id, version = null) {}
