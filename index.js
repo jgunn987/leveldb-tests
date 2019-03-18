@@ -189,7 +189,7 @@ function indexDocumentLinks(db, schema, doc) {
 function indexDocumentOpLinks(db, schema, doc, type) {
   return _.flatten(doc.$links[type].map(link => 
     link[0] && link[1] ? 
-      createLinkOps(schema.name + ':' + doc._id, link[0], link[1])
+      createLinkOps(schema.name + ':' + doc._id, link[0], link[1], link[2] || {})
         .map(key => ({ type, ...key })) : undefined));
 }
 
@@ -238,11 +238,7 @@ function invertedIndexer(db, schema, name, options, doc) {
 }
 
 function linkIndexer(db, schema, name, options, doc) {
-  const s = doc._id;
-  const p = options.rel;
-  const o = 'object._id';
   return [];
-  return createLinkOps(s, p, o);
 }
 
 async function runMigration(db, p, c) {
@@ -485,7 +481,7 @@ assert.ok(doc._v);
 
 const $links = {
   put: [
-    ['has', 'Comment:1'],
+    ['has', 'Comment:1', { metadata: {} }],
   ],
   del: [
     ['has', 'Car:2']
