@@ -66,11 +66,11 @@ latest schema        | %{table.name}/$schema/latest | {schema}
 schema versions      | %{table.name}/$schema:{schema.txid} | {schema}
 latest version       | %{table.name}/$d/{doc.uuid} | {doc}
 versions log         | %{table.name}/$v/{doc.txid}:{doc.uuid} | {doc}
-default index        | %{table.name}/$i/{index.name}:{field.name}={field.value}:{doc.uuid} | @{doc.uuid}
-unique indexes       | %{table.name}/$i/{index.name}:{field.name}={field.value} | @{doc.uuid}
-inverted indexes     | %{table.name}/$i/{index.name}:{field.name}={token}:{doc.uuid} | @{doc.uuid}
-compound indexes     | %{table.name}/$i/{index.name}:{field1.name}={field1.value}&{field2.name}={field2.value}&{...}:{doc.uuid} | @{doc.uuid}
-links                | %{table.name}/$@/{subject.uuid}:{subject.predicate}/$i/{index.name}:{field.name}{field.value}:{doc.uuid} | @{doc.uuid}
+default index        | %{table.name}/$i/{index.name}:{field.name}={field.value}:{doc.uuid} | @{doc.uuid} | {doc}
+unique indexes       | %{table.name}/$i/{index.name}:{field.name}={field.value} | @{doc.uuid} | {doc}
+inverted indexes     | %{table.name}/$i/{index.name}:{field.name}={token}:{doc.uuid} | @{doc.uuid} | {doc}
+compound indexes     | %{table.name}/$i/{index.name}:{field1.name}={field1.value}&{field2.name}={field2.value}&{...}:{doc.uuid} | @{doc.uuid} | {doc}
+links                | %{table.name}/$@/{subject.uuid}:{subject.predicate}/$i/{index.name}:{field.name}{field.value}:{doc.uuid} | @{doc.uuid} | {doc}
 
 graph links
 @sop/{subject.uuid}-{object.uuid}-{predicate} => {spo} |
