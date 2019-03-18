@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node test/index.js"
+    "test": "rm -rf /tmp/test-db && node t.js"
   },
   "keywords": [],
   "author": "",

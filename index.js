@@ -1,9 +1,9 @@
-const assert = require('assert');
 const jmespath = require('jmespath');
 const uuid = require('uuid');
 const _ = require('lodash');
 const mergeStream = require('merge-stream');
 const { Transform } = require('stream');
+const EventEmitter = require('events');
 const natural = require('natural');
 const tokenizer = /[\W\d]+/;
 const vm = require('vm');
@@ -45,7 +45,8 @@ function createDoc(doc) {
 function createSchema(schema) {
   return { 
     name: schema.name || '', 
-    indexes: schema.indexes || {}
+    indexes: schema.indexes || {},
+    _v: (+new Date()).toString(),
   };
 }
 
@@ -72,12 +73,24 @@ function createLinkKeys(s, p, o) {
   ];
 }
 
-function docLatestBaseKey(table) {
-  return `%${table}/$latest`;
+function metadataKey() {
+  return `#metadata`;
+}
+
+function schemaLatestKey(table) {
+  return `%${table}/$schema/latest`;
+}
+
+function schemaKey(table, version) {
+  return `%${table}/$schema:${version}`;
 }
   
 function indexBaseKey(table, indexName) {
   return `%${table}/$i/${indexName}`;
+}
+
+function docLatestBaseKey(table) {
+  return `%${table}/$latest`;
 }
 
 function docLatestKey(table, uuid) {
@@ -396,141 +409,77 @@ function indexWithout(db, index, start, end) {
   }));
 }
 
-/*
-{
-  table: 'Entity',
-  filter: {
-    type: 'intersection',
-    expressions: [
-      { type: 'eq', field: 'name', value: 'James' }, 
-      { type: 'gt', field: 'name', value: 'James' }, 
-      { type: 'lt', field: 'name', value: 'James' }, 
-      { type: 'match', field: 'name', value: '.*' },
-      { type: 'union', expressions: [{
-        { type: 'eq', field: 'name', value: 'James' }, 
-        { type: 'gt', field: 'name', value: 'James' }, 
-        { type: 'lt', field: 'name', value: 'James' }, 
-        { type: 'match', field: 'name', value: '.*' },
-      }] },
-    ]
-  }],
-  projections: [{
-    field: 'comments',
-    query: {
-      table: 'Comment',
-      filter: [],
-      projections: [{
-        field: 'authors',
-        table: 'User',
-        filter: []
-      }]
-    }
-  }]
-  distinct: ['name', 'age'],
-  order: { fields: ['name', 'age'], dir: 'ASC' },
-  offset: 0,
-  limit: 100
-}
-*/
-const db = require('level')('/tmp/test-db');
-db.indexers = {};
-db.indexers.default = defaultIndexer; 
-db.indexers.inverted = invertedIndexer; 
-db.indexers.link = linkIndexer; 
-db.filters = {};
-db.filters.gt = [docGt, indexGt];
-db.filters.gte = [docGte, indexGte];
-db.filters.lt = [docLt, indexLt];
-db.filters.lte = [docLte, indexLte];
-db.filters.eq = [docEq, indexEq];
-db.filters.neq = [docNeq, indexNeq];
-db.filters.match = [docMatch];
-db.filters.search = [docSearch, indexSearch];
-db.filters.within = [docWithin, indexWithin];
-db.filters.without = [docWithout, indexWithout];
-db.schemas = {};
-db.schemas.User = {
-  name: 'User',
-  indexes: {
-    name: { type: 'default', fields: ['name'] },
-    email: { type: 'default', fields: ['email'], unique: true },
-    text: { type: 'inverted', fields: ['text'] },
-    friends: { type: 'link', rel: 'friends', table: 'User', indexes: [
-      'name', 'text'
-    ] }
+class DB extends EventEmitter {
+  constructor(db) {
+    super();
+    this.db = db;
+    this.metadata = {};
+    this.schemas = {};
+    this.init();
   }
-};
 
-const userSchema2 = {
-  name: 'User',
-  indexes: {
-    name: { type: 'default', fields: ['name'] },
-    email: { type: 'default', fields: ['email'] },
-    tagline: { type: 'default', fields: ['tagline'] },
-    bio: { type: 'inverted', fields: ['bio'] },
-    text: { type: 'inverted', fields: ['text'] },
-    friends: { type: 'link', rel: 'friends', table: 'User', indexes: [
-      'name', 'text'
-    ] }
+  async init() {
+    await this.loadMetadata();
+    await this.loadSchemas();
+    await this.saveMetadata();
+    this.emit('init');
   }
-};
 
-const doc = createDoc(db, { title: 'Create' });
-assert.ok(doc._id);
-assert.ok(doc._v);
-
-const $links = {
-  put: [
-    ['has', 'Comment:1', { metadata: {} }],
-  ],
-  del: [
-    ['has', 'Car:2']
-  ]
-}
-Promise.all([
-  putDocument(db, 'User', { name: 'Jameson', email: 'jgunn987@gmail.com', $links }),
-  putDocument(db, 'User', { name: 'Jameson1', email: 'jgunn987@gmail.com1', $links }),
-  putDocument(db, 'User', { name: 'Jameson2', email: 'jgunn987@gmail.com2', $links }),
-  putDocument(db, 'User', { name: 'Jameson3', email: 'jgunn987@gmail.com3', $links }),
-  putDocument(db, 'User', { name: 'Jameson4', email: 'jgunn987@gmail.com4', $links }),
-  putDocument(db, 'User', { name: 'Jameson5', email: 'jgunn987@gmail.com5', $links }),
-  putDocument(db, 'User', { name: 'Jameson6', email: 'jgunn987@gmail.com6', $links }),
-]).then(async (ids) => {
-  const newDoc = await getDocument(db, 'User', ids[0]);
-  assert.ok(newDoc._id === ids[0]);
-  assert.ok(newDoc._v);
-  assert.ok(newDoc.name === 'Jameson');
-  assert.ok(newDoc.email === 'jgunn987@gmail.com');
-  const versionDoc = await getDocument(db, 'User', ids[0], newDoc._v);
-  assert.ok(_.isEqual(newDoc, versionDoc));
-  const indexes = await indexDocument(db, db.schemas['User'], versionDoc);
-  assert.ok(indexes.length === 14);
-  await delDocument(db, 'User', ids[0]);
-  const delDoc = await getDocument(db, 'User', ids[0]);
-  assert.ok(!delDoc);
-  
-  //db.createKeyStream().on('data', console.log);
-  /*
-  queryDocuments(db, { 
-    table: 'User', 
-    filter: { 
-      type: 'eq', field: 'name', value: 'Jameson1'
+  async loadMetadata() {
+    try {
+      this.metadata = JSON.parse(await this.db.get(metadataKey()));
+    } catch (err) {
+      this.metadata = { tables: [] };
     }
-  })
-  //.on('data', console.log);
-  */
-  //createMigrationStream(db, db.schemas['User'], userSchema2)
-    //.on('data', console.log);
-});
-/*
-indexDocument(db, db.schemas.User, { _id: '1', name: 'James', email: 'jgunn987999@gmail.com', text: 'one two' })
-  .then((keys) => {
-    assert.ok(keys.length === 10);
-    assert.ok(keys[0].type === 'put');
-    assert.ok(keys[0].key === '%User/$i/name:James:1');
-    assert.ok(keys[0].value === '1');
-    assert.ok(keys[1].type === 'put');
-    assert.ok(keys[1].key === '%User/$i/email:jgunn987999@gmail.com');
-    assert.ok(keys[1].value === '1');
-  });
-  */
+    return this;
+  }
+
+  async loadSchemas() {
+    this.metadata.tables.forEach(async t =>
+      await this.loadSchema(t));
+    return this;
+  }
+
+  async loadSchema(table) {
+    try {
+      this.schemas[table] = 
+        JSON.parse(await this.db.get(schemaLatestKey(table)));
+    } catch (err) {
+      throw new Error(`schema not found for table '${t}'`);
+    }
+    return this; 
+  }
+
+  async saveMetadata() {
+    await this.db.put(metadataKey(),
+      JSON.stringify(this.metadata));
+    return this;
+  }
+
+  async migrate(schema) {
+    const candidate = createSchema(schema);
+    const exisiting = createSchema(this.schemas[candidate.name] || {});
+    const name = candidate.name;
+    // 
+    // do migration here
+    //
+    const data = JSON.stringify(candidate);
+    await this.db.batch([
+      { type: 'put', key: schemaLatestKey(name), data },
+      { type: 'put', key: schemaKey(name, candidate._v), data }
+    ]);
+
+    this.schemas[name] = candidate;
+    this.metadata.tables.push(name);
+    this.metadata.tables = _.uniq(this.metadata.tables);
+    return this.saveMetadata();
+  }
+
+  async transaction() {}
+  async get(table, id, version = null) {}
+  async put(table, doc) {}
+  async del(table, id) {}
+  async query(q) {}
+}
+
+module.exports = db => new DB(db);
