@@ -265,10 +265,14 @@ function runDropStream(db, p, c) {
 }
 
 function runCreateStream(db, p, c) {
-  return batchStream(indexAllDocuments(db, c, compareIndices(c, p)));
+  return batchStream(db, indexAllDocuments(db, c, compareIndices(c, p)));
 }
 
 function batchStream(db, stream) {
+  if(stream.hasOwnProperty('isEmpty') && stream.isEmpty()) {
+    return Promise.resolve();
+  }
+
   return new Promise((resolve, reject) => {
     const batch = [];
     stream.on('data', data => batch.push(data))
@@ -451,8 +455,12 @@ class DB extends EventEmitter {
   }
 
   async saveMetadata() {
-    await this.db.put(metadataKey(),
-      JSON.stringify(this.metadata));
+    try {
+      await this.db.put(metadataKey(),
+        JSON.stringify(this.metadata));
+    } catch (err) {
+      throw new Error(`could not save system metadata`);
+    }
     return this;
   }
 
@@ -460,9 +468,9 @@ class DB extends EventEmitter {
     const candidate = createSchema(schema);
     const exisiting = createSchema(this.schemas[candidate.name] || {});
     const name = candidate.name;
-    // 
-    // do migration here
-    //
+    
+    await runMigration(this.db, exisiting, candidate);
+
     const data = JSON.stringify(candidate);
     await this.db.batch([
       { type: 'put', key: schemaLatestKey(name), data },
