@@ -166,9 +166,7 @@ async function unindexDocument(db, schema, doc, indexes = null) {
 async function dropAllDocLinks(db, schema, doc) {
   return new Promise((resolve, reject) => {
     const batch = [];
-    mergeStream(
-      getLinkStream(db, schema, doc, 'spo'),
-      getLinkStream(db, schema, doc, 'ops'))
+    getConnectedLinksStream(db, schema, doc)
       .pipe(transformer(function (data, enc, done) {
         const spo = JSON.parse(data.value);
         createLinkKeys(spo.s, spo.p, spo.o)
@@ -178,6 +176,12 @@ async function dropAllDocLinks(db, schema, doc) {
         .on('end', resolve(batch))
         .on('data', data => batch.push(data));
   });
+}
+
+function getConnectedLinksStreams(db, schema, doc) {
+  return mergeStream(
+    getLinkStream(db, schema, doc, 'spo'),
+    getLinkStream(db, schema, doc, 'ops'));
 }
 
 function getLinkStream(db, schema, doc, register) {
@@ -438,6 +442,16 @@ class DB extends EventEmitter {
     return this;
   }
 
+  async saveMetadata() {
+    try {
+      await this.db.put(metadataKey(),
+        JSON.stringify(this.metadata));
+    } catch (err) {
+      throw new Error(`could not save system metadata`);
+    }
+    return this;
+  }
+
   async loadSchemas() {
     this.metadata.tables.forEach(async t =>
       await this.loadSchema(t));
@@ -454,33 +468,36 @@ class DB extends EventEmitter {
     return this; 
   }
 
-  async saveMetadata() {
-    try {
-      await this.db.put(metadataKey(),
-        JSON.stringify(this.metadata));
-    } catch (err) {
-      throw new Error(`could not save system metadata`);
-    }
-    return this;
-  }
-
+  // TODO: create checkpoints for migration in the case of failure
   async migrate(schema) {
     const candidate = createSchema(schema);
     const exisiting = createSchema(this.schemas[candidate.name] || {});
     const name = candidate.name;
     
-    await runMigration(this.db, exisiting, candidate);
+    try {
+      await runMigration(this.db, exisiting, candidate);
+    } catch(err) {
+      throw new Error(`failed to migrate table ${name}`);
+    }
 
-    const data = JSON.stringify(candidate);
-    await this.db.batch([
-      { type: 'put', key: schemaLatestKey(name), data },
-      { type: 'put', key: schemaKey(name, candidate._v), data }
-    ]);
-
+    await this.saveSchema(candidate);
     this.schemas[name] = candidate;
     this.metadata.tables.push(name);
     this.metadata.tables = _.uniq(this.metadata.tables);
     return this.saveMetadata();
+  }
+
+  async saveSchema(schema) {
+    try {
+      const data = JSON.stringify(schema);
+      await this.db.batch([
+        { type: 'put', key: schemaLatestKey(schema.name), data },
+        { type: 'put', key: schemaKey(schema.name, schema._v), data }
+      ]);
+    } catch(err) {
+      throw new Error(`failed to save schema for table ${schema.table}`);
+    }
+    return this; 
   }
 
   async transaction() {}
