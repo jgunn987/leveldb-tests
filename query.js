@@ -69,20 +69,25 @@ function parseFilter(schema, f) {
   }
 }
 
-function findCompoundIndex(schema, filters) {
+function findCompoundIndex(schema, filters, type = 'default') {
   const names = filters.map(f => f.field).sort();
   return filters.find(f => f.type === 'eq') ?
     Object.keys(schema.indexes)
-      .filter(name => _.isEqual(names, 
-        (schema.indexes[name].fields || []).sort()))[0] :
-    undefined;
+      .filter(name => {
+        const index = schema.indexes[name];
+        return index.type === type &&
+          _.isEqual(names, (index.fields || []).sort())
+      })[0] : undefined;
 }
 
-function findIndexes(schema, field) {
+function findIndexes(schema, field, type = 'default') {
   return Object.keys(schema.indexes)
     .filter(name => {
-      const fields = schema.indexes[name].fields || [];
-      return fields.indexOf(field) !== -1 && fields.length === 1;
+      const index = schema.indexes[name];
+      const fields = index.fields || [];
+      return fields.indexOf(field) !== -1 && 
+        index.type === type &&
+        fields.length === 1;
     });
 }
 
