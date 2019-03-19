@@ -11,62 +11,55 @@ function docEq(doc, field, value) { return doc[field] === value; }
 function indexEq(index, value) { return value + ':id'; }
 
 function and(schema, f) {
-  // TODO: check for compound index availability
   // we can get away without a full scan if we have at least one index
   // as our resulting set will have to be in that index.
   // once scanned, we individually fetch the documents
   // for all in that index and run through the in memory evaluators
-  const compound = findCompoundIndex(schema, f.expressions);
   const parsed = f.expressions.map(e => parseFilter(schema, e));
-  // create a closure for each scan
-  const index = parsed.filter(e => e.indexes)
-    .map(e => () => {
-      indexEq(e.value, e.indexes[0])
-    });
-
-  // create a closure for each step
-  const inmem = parsed.filter(e => !e.indexes)
-    .map(e => (doc) => docEq(doc, e.field, e.value));
-
-  //console.log(_.intersection([1,2,3], [2], [2,3])); 
-  //console.log(inmem[0]({ age: 21 }));
-  return parsed;
+  const inmem = parsed.filter(e => e[0]);
+  // TODO: check for compound index availability
+  const compound = findCompoundIndex(schema, f.expressions);
+  if(compound) return [inmem, compound];
+  const index = parsed.find(e => e[1]);
+  // run the first index we find, combining with inmem evaluators
+  if(index) {
+    return [inmem, index];
+  } else {
+    return [inmem];
+  }
 }
 
+// we need to hold a central set of all results
+// run every index in parallel and aggregate the results
+// as a set union. 
 function or(schema, f) {
-  // we need to hold a central set of all results
-  // run every index in parallel and aggregate the results
-  // as a set union. 
+  const parsed = f.expressions.map(e => parseFilter(schema, e));
+  const index = parsed.filter(e => e[1]);
+  const inmem = parsed.filter(e => e[0]);
   // if there is one expression in the chain that doesn't have
   // an index then we need to run a full scan, which means we dont run
   // any index scans we run all through memory
-  const parsed = f.expressions.map(e => parseFilter(schema, e));
-  // create a closure for each scan
-  const index = parsed.filter(e => e.indexes)
-    .map(e => () => {
-      indexEq(e.value, e.indexes[0])
-    });
+  if(index.length === parsed.length) {
+    return [inmem, parsed];
+  } else {
+    return [inmem];
+  }
+}
 
-  // create a closure for each step
-  const inmem = parsed.filter(e => !e.indexes)
-    .map(e => (doc) => docEq(doc, e.field, e.value));
+function eq(schema, f) {
+  const indexes = findIndexes(schema, f.field); 
+  return indexes.length ? [docEq, indexEq] : [docEq];
 }
 
 // each filter returns an optional index based stream
 // and an in memory lambda. If no stream is present
 // then a full scan of the table will be chosen and
 // all filters will run thier in memory lambdas
+const filters = { and, or, eq };
+
 function parseFilter(schema, f) {
-  switch(f.type) {
-    case 'or':
-      return or(schema, f);
-    case 'and':
-      return and(schema, f);
-    default:
-      const indexes = findIndexes(schema, f.field); 
-      return indexes.length ? { ...f, indexes } : f;
-      break;
-  }
+  const filter = filters[f.type];
+  return filter ? filter(schema, f) : eq(schema, f);
 }
 
 function findCompoundIndex(schema, filters, type = 'default') {
@@ -104,7 +97,7 @@ function parseQuery(q) {
   const filter = parseFilter(schema, q);
 }
 
-parseFilter(schema, {
+console.log(parseFilter(schema, {
   type: 'and',
   expressions: [{
     type: 'eq',
@@ -115,5 +108,5 @@ parseFilter(schema, {
     field: 'age',
     value: 21
   }]
-});
+}));
 
