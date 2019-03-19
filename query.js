@@ -20,22 +20,12 @@ function indexEq(db, index, value) {
 // we need to hold a central set of all results
 // run every index in parallel and aggregate the results
 // as a set union. 
-async function or(schema, f) {
+function or(schema, f) {
   // if there is one expression in the chain that doesn't have
   // an index then we need to run a full scan, which means we dont run
   // any index scans we run all through memory
   const parsed = f.expressions.map(e => parseFilter(schema, e));
-  
-  // this is a sub optimal solution as we would like to run
-  // each of these expressions sequentially short circuiting
-  // on the first positive result.
-  // TODO: run in async for loop
-  function makeInMemOrClosure(parsedExpressions) {
-    return function (db, doc) {
-      return Promise.all(parsedExpressions.map(op => op[0](db, doc)))
-        .then(results => results.some(Boolean));
-    };
-  }
+  return [makeInMemOrClosure(parsed)];
 
   /*
   const inmem = parsed.filter(e => e[0]).map(e => e[0]);
@@ -45,24 +35,23 @@ async function or(schema, f) {
   */
 }
 
-async function and(schema, f) {
+function makeInMemOrClosure(parsedExpressions) {
+  return async function (db, doc) {
+    const length = parsedExpressions.length;
+    for(let i=0; i < length; ++i)
+      if(await parsedExpressions[i][0](db, doc))
+        return true;
+    return false;
+  };
+}
+
+function and(schema, f) {
   // we can get away without a full scan if we have at least one index
   // as our resulting set will have to be in that index.
   // once scanned, we individually fetch the documents
   // for all in that index and run through the in memory evaluators
   const parsed = f.expressions.map(e => parseFilter(schema, e));
-
-  // there is sub optimal performance here as every expression
-  // in the and chain is executed against the document when what
-  // we would really like is to run these sequentially;
-  // TODO: run in async for loop
-  function makeInMemAndClosure(parsedExpressions) {
-    return function (db, doc) {
-      return Promise.all(parsedExpressions.map(op => op[0](db, doc)))
-        .then(results => results.every(Boolean));
-    };
-  }
-
+  return [makeInMemAndClosure(parsed)];
   /*
   const inmem = parsed.filter(e => e[0]).map(e => e[0]);
   const compound = findCompoundIndex(schema, f.expressions);
@@ -76,6 +65,16 @@ async function and(schema, f) {
   return index ?
     [inmem, (db, ...values) => index[1](db, value)] : [inmem];
   */
+}
+
+function makeInMemAndClosure(parsedExpressions) {
+  return async function (db, doc) {
+    const length = parsedExpressions.length;
+    for(let i=0; i < length; ++i)
+      if(!await parsedExpressions[i][0](db, doc))
+        return false;
+    return true;
+  };
 }
 
 function eq(schema, f) {
@@ -139,8 +138,8 @@ function parseQuery(q) {
   const schema = {};
   const filter = parseFilter(schema, q);
 }
-/*
-parseFilter(schema, {
+
+const queryAnd = parseFilter(schema, {
   type: 'and',
   expressions: [{
     type: 'eq',
@@ -152,8 +151,8 @@ parseFilter(schema, {
     value: 21
   }]
 });
-*/
-parseFilter(schema, {
+
+const queryOr = parseFilter(schema, {
   type: 'or',
   expressions: [{
     type: 'eq',
@@ -166,3 +165,14 @@ parseFilter(schema, {
   }]
 });
 
+Promise.all([
+  queryOr[0]({}, { age: 21, name: 'James' }),
+  queryOr[0]({}, { age: 22, name: 'James' }),
+  queryOr[0]({}, { age: 22, name: 'ames' })
+]).then(console.log);
+
+Promise.all([
+  queryAnd[0]({}, { age: 21, name: 'James' }),
+  queryAnd[0]({}, { age: 22, name: 'James' }),
+  queryAnd[0]({}, { age: 22, name: 'ames' })
+]).then(console.log);
