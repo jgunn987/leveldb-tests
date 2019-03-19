@@ -8,7 +8,10 @@ const schema = {
 };
 
 function docEq(doc, field, value) { return doc[field] === value; }
-function indexEq(index, value) { return value + ':id'; }
+function indexEq(db, index, value) { 
+  console.log('i got called');
+  return value + ':id'; 
+}
 
 function and(schema, f) {
   // we can get away without a full scan if we have at least one index
@@ -16,17 +19,18 @@ function and(schema, f) {
   // once scanned, we individually fetch the documents
   // for all in that index and run through the in memory evaluators
   const parsed = f.expressions.map(e => parseFilter(schema, e));
-  const inmem = parsed.filter(e => e[0]);
-  // TODO: check for compound index availability
+  const inmem = parsed.filter(e => e[0]).map(e => e[0]);
   const compound = findCompoundIndex(schema, f.expressions);
-  if(compound) return [inmem, compound];
+  if(compound) {
+    return [inmem, (db, ...values) => 
+      indexEq(db, compound, ...values)];
+  }
+  
   const index = parsed.find(e => e[1]);
   // run the first index we find, combining with inmem evaluators
-  if(index) {
-    return [inmem, index];
-  } else {
-    return [inmem];
-  }
+  return index ?
+    [inmem, (db, ...values) => 
+      index[1](db, value)] : [inmem];
 }
 
 // we need to hold a central set of all results
@@ -34,21 +38,20 @@ function and(schema, f) {
 // as a set union. 
 function or(schema, f) {
   const parsed = f.expressions.map(e => parseFilter(schema, e));
-  const index = parsed.filter(e => e[1]);
-  const inmem = parsed.filter(e => e[0]);
+  const inmem = parsed.filter(e => e[0]).map(e => e[0]);
+  const index = parsed.filter(e => e[1]).map(e => e[1]);
   // if there is one expression in the chain that doesn't have
   // an index then we need to run a full scan, which means we dont run
   // any index scans we run all through memory
-  if(index.length === parsed.length) {
-    return [inmem, parsed];
-  } else {
-    return [inmem];
-  }
+  return index.length === parsed.length ?
+    [inmem, parsed] : [inmem];
 }
 
 function eq(schema, f) {
   const indexes = findIndexes(schema, f.field); 
-  return indexes.length ? [docEq, indexEq] : [docEq];
+  return indexes.length ?
+    [docEq, (db, value) =>
+      indexEq(db, indexes[0], value)] : [docEq];
 }
 
 // each filter returns an optional index based stream
