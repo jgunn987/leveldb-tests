@@ -134,16 +134,14 @@ function transformer(fn) {
 }
 
 function batchStream(db, stream) {
-  if(stream.hasOwnProperty('isEmpty') && stream.isEmpty()) {
-    return Promise.resolve([]);
-  }
-
-  return new Promise((resolve, reject) => {
-    const batch = [];
-    stream.on('data', data => batch.push(data))
-      .on('end', () => resolve(batch))
-      .on('error', reject);
-  });
+  return stream.hasOwnProperty('isEmpty') && stream.isEmpty() ?
+    Promise.resolve([]):
+    new Promise((resolve, reject) => {
+      const batch = [];
+      stream.on('data', data => batch.push(data))
+        .on('end', () => resolve(batch))
+        .on('error', reject);
+    });
 }
 
 function dropIndex(db, schema, indexName) {
@@ -265,9 +263,7 @@ function invertedIndexer(db, schema, name, options, doc) {
   });
 }
 
-function linkIndexer(db, schema, name, options, doc) {
-  return [];
-}
+function linkIndexer(db, schema, name, options, doc) { return []; }
 
 async function runMigration(db, p, c) {
   return db.db.batch([

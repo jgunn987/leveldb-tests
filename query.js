@@ -13,7 +13,7 @@ function indexEq(index, value) { return value + ':id'; }
 function and(schema, f) {
   // TODO: check for compound index availability
   // we can get away without a full scan if we have at least one index
-  // as our result set will be in that index.
+  // as our resulting set will have to be in that index.
   // once scanned, we individually fetch the documents
   // for all in that index and run through the in memory evaluators
   const compound = findCompoundIndex(schema, f.expressions);
@@ -84,6 +84,19 @@ function findIndexes(schema, field) {
       const fields = schema.indexes[name].fields || [];
       return fields.indexOf(field) !== -1 && fields.length === 1;
     });
+}
+
+// * get schema for query
+// * parse filters
+// * parse projections
+// * run main table query
+// * sort and limit main query
+// * run projection queries 
+// * sort and limit projection queries
+// * return results;
+function parseQuery(q) {
+  const schema = {};
+  const filter = parseFilter(schema, q);
 }
 
 parseFilter(schema, {

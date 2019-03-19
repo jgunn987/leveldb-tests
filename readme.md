@@ -59,6 +59,8 @@ boot order
 
 document tables
 
+TODO: add schema support for embeddeing documents under index keys
+
 type                 | key template | value
 ---------------------|--------------|------
 count                | %{table.name}/$count | {int} 
