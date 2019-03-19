@@ -155,23 +155,23 @@ function scanAllIndexKeys(db, schema, indexName) {
   return db.db.createKeyStream({ gte: key, lt: key + '~' });
 }
 
-function indexAllDocuments(db, schema, indexes = null) {
-  return scanAllDocuments(db, schema.name)
+function indexAllDocs(db, schema, indexes = null) {
+  return scanAllDocs(db, schema.name)
     .pipe(transformer(function (data, enc, done) {
       const value = JSON.parse(data.value);
       if(!value) return done();
-      indexDocument(db, schema, createDoc(value), indexes)
+      indexDoc(db, schema, createDoc(value), indexes)
         .then(ops => ops.map(op => this.push(op)))
         .then(ops => done());
     }));
 }
 
-function scanAllDocuments(db, table) {
+function scanAllDocs(db, table) {
   const key = docLatestBaseKey(table);
   return db.db.createReadStream({ gte: key, lt: key + '~' });
 }
 
-async function unindexDocument(db, schema, doc, indexes = null) {
+async function unindexDoc(db, schema, doc, indexes = null) {
   return (await generateIndexKeys(db, schema, doc, indexes))
     .map(data => ({ type: 'del', ...data }));
 }
@@ -200,19 +200,19 @@ function getLinkStream(db, schema, doc, register) {
 
 //TODO: run the validator after indexing has taken place otherwise we
 //      are doing the same thing twice and it is a performance hit
-async function indexDocument(db, schema, doc, indexes = null) {
+async function indexDoc(db, schema, doc, indexes = null) {
   await validateIndexOp(db, schema, doc, indexes);
   return (await generateIndexKeys(db, schema, doc, indexes))
     .map((data) => ({ type: 'put', ...data }))
-    .concat(indexDocumentLinks(db, schema, doc));
+    .concat(indexDocLinks(db, schema, doc));
 }
 
-function indexDocumentLinks(db, schema, doc) {
-  return indexDocumentOpLinks(db, schema, doc, 'put')
-    .concat(indexDocumentOpLinks(db, schema, doc, 'del'));
+function indexDocLinks(db, schema, doc) {
+  return indexDocOpLinks(db, schema, doc, 'put')
+    .concat(indexDocOpLinks(db, schema, doc, 'del'));
 }
 
-function indexDocumentOpLinks(db, schema, doc, type) {
+function indexDocOpLinks(db, schema, doc, type) {
   return _.flatten(doc.$links[type].map(link => 
     link[0] && link[1] ? 
       createLinkOps(schema.name + ':' + doc._id, link[0], link[1], link[2] || {})
@@ -278,7 +278,7 @@ function runDropStream(db, p, c) {
 }
 
 function runCreateStream(db, p, c) {
-  return batchStream(db, indexAllDocuments(db, c, compareIndices(c, p)));
+  return batchStream(db, indexAllDocs(db, c, compareIndices(c, p)));
 }
 
 function compareIndices(a, b, action) {
@@ -286,34 +286,167 @@ function compareIndices(a, b, action) {
     !_.isEqual(a.indexes[index], b.indexes[index]) && index).filter(Boolean);
 }
 
-async function putDocument(db, table, doc) {
+async function put(db, table, doc) {
   const schema = createSchema(db.schemas[table]);
   const newDoc = createDoc(doc);
   const value = JSON.stringify(newDoc);
   await db.db.batch([
-    ...await indexDocument(db, schema, newDoc), 
+    ...await indexDoc(db, schema, newDoc), 
     { type: 'put', key: docLatestKey(table, newDoc._id), value },
     { type: 'put', key: docKey(table, newDoc._id, newDoc._v), value }
   ]);
   return newDoc._id;
 }
 
-async function getDocument(db, table, uuid, version) {
+async function get(db, table, uuid, version) {
   return JSON.parse(version ?
     await db.db.get(docKey(table, uuid, version)):
     await db.db.get(docLatestKey(table, uuid)));
 }
 
-async function delDocument(db, table, uuid) {
-  const doc = await getDocument(db, table, uuid);
+async function del(db, table, uuid) {
+  const doc = await get(db, table, uuid);
   return await db.db.batch([
-    ...await unindexDocument(db, db.schemas[table], doc), 
+    ...await unindexDoc(db, db.schemas[table], doc), 
     ...await dropAllDocLinks(db, db.schemas[table], doc),
     { type: 'put', key: docLatestKey(table, doc._id), value: 'null' }
   ]);
 }
 
-function queryDocuments(db, query) {}
+// query functions
+// ---------------
+
+function or(schema, f) {
+  const parsed = f.expressions.map(e => parseFilter(schema, e));
+  return [makeInMemOrClosure(parsed),
+         makeIndexOrStream(parsed)];
+}
+
+function makeInMemOrClosure(parsedExpressions) {
+  return async function (db, doc) {
+    const length = parsedExpressions.length;
+    for(let i=0; i < length; ++i)
+      if(await parsedExpressions[i][0](db, doc))
+        return true;
+    return false;
+  };
+}
+
+// we need to hold a central set of all results
+// run every index in parallel and aggregate the results
+// as a set union. 
+// if there is one expression in the chain that doesn't have
+// an index then we need to run a full scan, which means we dont run
+// any index scans we run all through memory
+function makeIndexOrStream(parsedExpresions) {
+  const withoutStream = parsedExpressions.find(e => !e[1]);
+  return !withoutStream ? function (db) {
+    const seen = [];
+    return mergeStream(parsedExpressions.map(e => e[1](db)))
+      .pipe(transformer(function (data, enc, done) {
+       
+      }));
+    return stream;
+  } : undefined;
+}
+
+function and(schema, f) {
+  const parsed = f.expressions.map(e => parseFilter(schema, e));
+  const compound = findCompoundIndex(schema, f.expressions);
+  return compound ?
+    [makeInMemAndClosure(parsed), 
+     makeIndexClosure(indexEq, compound)]:
+    [makeInMemAndClosure(parsed),
+     makeIndexAndStream(parsed)];
+}
+
+function makeInMemAndClosure(parsedExpressions) {
+  return async function (db, doc) {
+    const length = parsedExpressions.length;
+    for(let i=0; i < length; ++i)
+      if(!await parsedExpressions[i][0](db, doc))
+        return false;
+    return true;
+  };
+}
+
+// we can get away without a full scan if we have at least one index
+// as our resulting set will have to be in that index.
+// once scanned, we individually fetch the documents
+// for all in that index and run through the in memory evaluators
+function makeIndexAndStream(parsedExpressions) {
+  const withStream = parsedExpressions.find(e => e[1]);
+  return withStream ? function (db) {
+    withStream[0](db).on('data', data => {
+        
+    });
+  } : undefined;
+}
+
+function eq(schema, f) {
+  const indexes = findIndexes(schema, f.field); 
+  return indexes.length ? [
+    makeInMemClosure(docEq, f.field, f.value), 
+    makeIndexClosure(indexEq, indexes[0])
+  ] : [makeInMemClosure(docEq, f.field, f.value)];
+}
+
+function makeInMemClosure(fn, field, ...values) {
+  return (db, doc) => fn(db, doc, field, ...values);
+}
+
+function makeIndexClosure(fn, index, ...values) {
+  return (db) => fn(db, index, ...values);
+}
+
+// each filter returns an optional index based stream
+// and an in memory lambda. If no stream is present
+// then a full scan of the table will be chosen and
+// all filters will run thier in memory lambdas
+const filters = { and, or, eq };
+
+function parseFilter(schema, f) {
+  const filter = filters[f.type];
+  return filter ? filter(schema, f) : eq(schema, f);
+}
+
+function findCompoundIndex(schema, filters, type = 'default') {
+  const names = filters.map(f => f.field).sort();
+  return filters.find(f => f.type === 'eq') ?
+    Object.keys(schema.indexes)
+      .filter(name => {
+        const index = schema.indexes[name];
+        return index.type === type &&
+          _.isEqual(names, (index.fields || []).sort())
+      })[0] : undefined;
+}
+
+function findIndexes(schema, field, type = 'default') {
+  return Object.keys(schema.indexes)
+    .filter(name => {
+      const index = schema.indexes[name];
+      const fields = index.fields || [];
+      return fields.indexOf(field) !== -1 && 
+        index.type === type &&
+        fields.length === 1;
+    });
+}
+
+function parseQuery(q) {
+  return parseFilter(schema, q);
+}
+
+// * get schema for query
+// * parse filters
+// * parse projections
+// * run main table query
+// * sort and limit main query
+// * run projection queries 
+// * sort and limit projection queries
+// * return results;
+function query(db, query) {
+  return parseQuery(db.schemas[query.table], query);
+}
 
 function docEq(db, doc, field, value) {
   return Promise.resolve(jmespath.search(doc, field) === value);
@@ -502,7 +635,7 @@ class DB extends EventEmitter {
 
   async get(table, id, version = null) {
     try {
-      const value = await getDocument(this, table, id, version);
+      const value = await get(this, table, id, version);
       if(!value) throw value;
       return value;
     } catch (err) {
@@ -512,7 +645,7 @@ class DB extends EventEmitter {
   
   async put(table, doc) {
     try {
-      return putDocument(this, table, doc);
+      return put(this, table, doc);
     } catch(err) {
       throw new Error(`unable to save document to table '${table}'`);
     }
@@ -520,13 +653,19 @@ class DB extends EventEmitter {
 
   async del(table, id) {
     try {
-      return delDocument(this, table, id);
+      return del(this, table, id);
     } catch(err) {
       throw new Error(`unable to delete document with id '${id}' from table '${table}'`);
     }
   }
 
-  async query(q) {}
+  async query(q) {
+    try {
+      return query(this, q);
+    } catch (err) {
+      throw new Error(`Error executing query on table '${q.table}'`);
+    }
+  }
 }
 
 module.exports = db => new DB(db);

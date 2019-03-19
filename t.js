@@ -235,6 +235,42 @@ async function testDel() {
   testGetAfterDelete('Test', id6);
 }
 
+const queryAnd = {
+  table: 'Test',
+  filter: {
+    type: 'and',
+    expressions: [{
+      type: 'eq',
+      field: 'name',
+      value: 'James'
+    }, {
+      type: 'eq',
+      field: 'age',
+      value: 21
+    }]
+  }
+};
+
+const queryOr = {
+  table: 'Test',
+  filter: {
+    type: 'or',
+    expressions: [{
+      type: 'eq',
+      field: 'name',
+      value: 'James'
+    }, {
+      type: 'eq',
+      field: 'age',
+      value: 21
+    }]
+  }
+};
+
+async function testQuery() {
+  const orInMem = db.query(queryOr); 
+}
+
 async function testDropMigrate() {
   await db.migrate(TestSchemaNull);
   assert.ok(db.schemas['Test']);
