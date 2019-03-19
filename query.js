@@ -12,9 +12,9 @@ function indexEq(index, value) { return value + ':id'; }
 
 function and(schema, f) {
   // TODO: check for compound index availability
-  // we can get away without a full scan if we have one index
-  // we scan the first index to find the members that will be contained
-  // in all the other expressions. then we individually fetch the documents
+  // we can get away without a full scan if we have at least one index
+  // as our result set will be in that index.
+  // once scanned, we individually fetch the documents
   // for all in that index and run through the in memory evaluators
   const parsed = f.expressions.map(e => parseFilter(schema, e));
   // create a closure for each scan
@@ -51,6 +51,10 @@ function or(schema, f) {
     .map(e => (doc) => docEq(doc, e.field, e.value));
 }
 
+// each filter returns an optional index based stream
+// and an in memory lambda. If no stream is present
+// then a full scan of the table will be chosen and
+// all filters will run thier in memory lambdas
 function parseFilter(schema, f) {
   switch(f.type) {
     case 'or':
