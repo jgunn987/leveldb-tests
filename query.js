@@ -16,6 +16,7 @@ function and(schema, f) {
   // as our result set will be in that index.
   // once scanned, we individually fetch the documents
   // for all in that index and run through the in memory evaluators
+  const compound = findCompoundIndex(schema, f.expressions);
   const parsed = f.expressions.map(e => parseFilter(schema, e));
   // create a closure for each scan
   const index = parsed.filter(e => e.indexes)
@@ -27,8 +28,8 @@ function and(schema, f) {
   const inmem = parsed.filter(e => !e.indexes)
     .map(e => (doc) => docEq(doc, e.field, e.value));
 
-  console.log(_.intersection([1,2,3], [2], [2,3])); 
-  console.log(inmem[0]({ age: 21 }));
+  //console.log(_.intersection([1,2,3], [2], [2,3])); 
+  //console.log(inmem[0]({ age: 21 }));
   return parsed;
 }
 
@@ -68,11 +69,20 @@ function parseFilter(schema, f) {
   }
 }
 
+function findCompoundIndex(schema, filters) {
+  const names = filters.map(f => f.field).sort();
+  return filters.find(f => f.type === 'eq') ?
+    Object.keys(schema.indexes)
+      .filter(name => _.isEqual(names, 
+        (schema.indexes[name].fields || []).sort()))[0] :
+    undefined;
+}
+
 function findIndexes(schema, field) {
   return Object.keys(schema.indexes)
     .filter(name => {
       const fields = schema.indexes[name].fields || [];
-      return fields.indexOf(field) !== -1;
+      return fields.indexOf(field) !== -1 && fields.length === 1;
     });
 }
 
