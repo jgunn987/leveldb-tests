@@ -357,11 +357,10 @@ function makeIndexOrStream(parsedExpresions) {
 function and(schema, f) {
   const parsed = f.expressions.map(e => parseFilter(schema, e));
   const compound = findCompoundIndex(schema, f.expressions);
+  const inmem = makeInMemAndClosure(parsed);
   return compound ?
-    [makeInMemAndClosure(parsed), 
-     makeIndexClosure(indexEq, compound)]:
-    [makeInMemAndClosure(parsed),
-     makeIndexAndStream(parsed)];
+    [inmem, makeIndexClosure(indexEq, compound)]:
+    [inmem, makeIndexAndStream(parsed, inmem)];
 }
 
 function makeInMemAndClosure(parsedExpressions) {
@@ -378,12 +377,18 @@ function makeInMemAndClosure(parsedExpressions) {
 // as our resulting set will have to be in that index.
 // once scanned, we individually fetch the documents
 // for all in that index and run through the in memory evaluators
-function makeIndexAndStream(parsedExpressions) {
+function makeIndexAndStream(parsedExpressions, inmemPipeline) {
   const withStream = parsedExpressions.find(e => e[1]);
   return withStream ? function (db) {
-    withStream[0](db).on('data', data => {
-        
-    });
+    withStream[0](db)
+      .pipe(transformer(async function (data, enc, done) {
+        // run through inmem pipeline, then add if success
+        const parsed = JSON.parse(data);
+        const doc = typeof data === 'string' ?
+          await db.db.get(data) : data;
+        if(await inmemPipeline(db, doc)) this.push(doc);
+        done();
+      }));
   } : undefined;
 }
 
