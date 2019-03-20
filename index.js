@@ -341,10 +341,14 @@ function makeInMemOrClosure(parsedExpressions) {
 function makeIndexOrStream(parsedExpresions) {
   const withoutStream = parsedExpressions.find(e => !e[1]);
   return !withoutStream ? function (db) {
-    const seen = [];
+    const seen = new Set();
     return mergeStream(parsedExpressions.map(e => e[1](db)))
       .pipe(transformer(function (data, enc, done) {
-       
+        if(!set.has(data)) {
+          set.add(data);
+          this.push(data);
+        }
+        done();
       }));
     return stream;
   } : undefined;
@@ -432,7 +436,7 @@ function findIndexes(schema, field, type = 'default') {
     });
 }
 
-function parseQuery(q) {
+function parseQuery(schema, q) {
   return parseFilter(schema, q);
 }
 
@@ -444,8 +448,8 @@ function parseQuery(q) {
 // * run projection queries 
 // * sort and limit projection queries
 // * return results;
-function query(db, query) {
-  return parseQuery(db.schemas[query.table], query);
+function query(db, q) {
+  return parseQuery(db.schemas[q.table], q);
 }
 
 function docEq(db, doc, field, value) {

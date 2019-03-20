@@ -135,6 +135,7 @@ async function runAll() {
   await testPut();
   await testGet();
   await testDel();
+  await testQuery();
   await testDropMigrate();
   db.db.createKeyStream()
     .on('data', console.log);
@@ -269,6 +270,7 @@ const queryOr = {
 
 async function testQuery() {
   const orInMem = db.query(queryOr); 
+  console.log(orInMem);
 }
 
 async function testDropMigrate() {
