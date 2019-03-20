@@ -258,8 +258,8 @@ const queryOr = {
     type: 'or',
     expressions: [{
       type: 'eq',
-      field: 'name',
-      value: 'James'
+      field: 'testDefault',
+      value: 'testDefaultValue'
     }, {
       type: 'eq',
       field: 'age',
