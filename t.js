@@ -252,6 +252,15 @@ const queryAnd = {
   }
 };
 
+const queryEq = {
+  table: 'Test',
+  filter: {
+    type: 'eq',
+    field: 'testDefault',
+    value: 'testDefaultValue'
+  }
+};
+
 const queryOr = {
   table: 'Test',
   filter: {
@@ -270,7 +279,7 @@ const queryOr = {
 
 async function testQuery() {
   const orInMem = await db.query(queryOr); 
-  console.log(orInMem);
+  const eqIndex = await db.query(queryEq); 
 }
 
 async function testDropMigrate() {

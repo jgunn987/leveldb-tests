@@ -394,9 +394,10 @@ function makeIndexAndStream(parsedExpressions, inmemPipeline) {
 
 function eq(schema, f) {
   const indexes = findIndexes(schema, f.field); 
+  const key = indexBaseKey(schema.name, indexes[0]);
   return indexes.length ? [
     makeInMemClosure(docEq, f.field, f.value), 
-    makeIndexClosure(indexEq, indexes[0])
+    makeIndexClosure(indexEq, key, f.value)
   ] : [makeInMemClosure(docEq, f.field, f.value)];
 }
 
@@ -404,8 +405,8 @@ function makeInMemClosure(fn, field, ...values) {
   return (db, doc) => fn(db, doc, field, ...values);
 }
 
-function makeIndexClosure(fn, index, ...values) {
-  return (db) => fn(db, index, ...values);
+function makeIndexClosure(fn, key, ...values) {
+  return (db) => fn(db, key, ...values);
 }
 
 // each filter returns an optional index based stream
@@ -464,9 +465,14 @@ function query(db, q) {
         if(doc && await parsed[0](db, doc)) {
           results.push(doc);
         }
-      }).on('end', () => console.log(results));
+      }).on('end', () => 1); 
   } else {
     // run stream
+    const results = [];
+    parsed[1](db)
+      .on('data', data => 
+        results.push(data.value))
+      .on('end', () => console.log(results));
   }
 }
 
@@ -476,7 +482,7 @@ function docEq(db, doc, field, value) {
 
 function indexEq(db, index, value) {
   const key = index + ':' + value;
-  return db.createReadStream({ gte: key + ':', lte: key + '~' });
+  return db.db.createReadStream({ gte: key + ':', lte: key + '~' });
 }
 
 function docNeq(db, doc, field, value) {
