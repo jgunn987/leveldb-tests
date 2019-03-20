@@ -672,7 +672,7 @@ class DB extends EventEmitter {
     try {
       return query(this, q);
     } catch (err) {
-      throw new Error(`Error executing query on table '${q.table}'`);
+      throw new Error(`error executing query on table '${q.table}'`);
     }
   }
 }
