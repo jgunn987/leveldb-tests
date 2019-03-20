@@ -338,7 +338,7 @@ function makeInMemOrClosure(parsedExpressions) {
 // if there is one expression in the chain that doesn't have
 // an index then we need to run a full scan, which means we dont run
 // any index scans we run all through memory
-function makeIndexOrStream(parsedExpresions) {
+function makeIndexOrStream(parsedExpressions) {
   const withoutStream = parsedExpressions.find(e => !e[1]);
   return !withoutStream ? function (db) {
     const seen = new Set();
@@ -442,7 +442,7 @@ function findIndexes(schema, field, type = 'default') {
 }
 
 function parseQuery(schema, q) {
-  return parseFilter(schema, q);
+  return parseFilter(schema, q.filter);
 }
 
 // * get schema for query
@@ -454,7 +454,20 @@ function parseQuery(schema, q) {
 // * sort and limit projection queries
 // * return results;
 function query(db, q) {
-  return parseQuery(db.schemas[q.table], q);
+  const table = q.table;
+  const parsed = parseQuery(db.schemas[table], q);
+  if(!parsed[1]) {
+    const results = [];
+    scanAllDocs(db, table)
+      .on('data', async data => {
+        const doc = JSON.parse(data.value);
+        if(doc && await parsed[0](db, doc)) {
+          results.push(doc);
+        }
+      }).on('end', () => console.log(results));
+  } else {
+    // run stream
+  }
 }
 
 function docEq(db, doc, field, value) {
