@@ -457,24 +457,40 @@ function parseQuery(schema, q) {
 function query(db, q) {
   const table = q.table;
   const parsed = parseQuery(db.schemas[table], q);
-  if(!parsed[1]) {
+  const result = !parsed[1] ? 
+    queryScanTable(db, table, parsed[0]):
+    queryScanIndex(db, parsed[1]);
+  return result;
+}
+
+function queryScanTable(db, table, eval) {
+  return new Promise((resolve, reject) => {
     const results = [];
     scanAllDocs(db, table)
+      .on('error', reject)
+      .on('end', () => resolve(results))
       .on('data', async data => {
         const doc = JSON.parse(data.value);
-        if(doc && await parsed[0](db, doc)) {
+        if(doc && await eval(db, doc)) {
+          console.log('here all');
           results.push(doc);
         }
-      }).on('end', () => 1); 
-  } else {
-    // run stream
-    const results = [];
-    parsed[1](db)
-      .on('data', data => 
-        results.push(data.value))
-      .on('end', () => console.log(results));
-  }
+      });
+  });
 }
+
+function queryScanIndex(db, indexStream) {
+  return new Promise((resolve, reject) => {
+    const results = [];
+    indexStream(db)
+      .on('error', reject)
+      .on('end', () => resolve(results))
+      .on('data', data => {
+          console.log('here');
+        results.push(data.value);
+      });
+  });
+} 
 
 function docEq(db, doc, field, value) {
   return Promise.resolve(jmespath.search(doc, field) === value);
