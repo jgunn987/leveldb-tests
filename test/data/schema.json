@@ -1,0 +1,36 @@
+[{
+  "name": "Test",
+  "indexes": {}
+}, {
+  "name": "Test",
+  "indexes": {
+    "testDefault": { "type": "default", "fields": ["testDefault"] }
+  }
+}, {
+  "name": "Test",
+  "indexes": {
+    "testDefault": { "type": "default", "fields": ["testDefault"] },
+    "testUnique": { "type": "default", "fields": ["testUnique"], "unique": true }
+  }
+}, {
+  "name": "Test",
+  "indexes": {
+    "testDefault": { "type": "default", "fields": ["testDefault"] },
+    "testUnique": { "type": "default", "fields": ["testUnique"], "unique": true },
+    "testInverted": { "type": "inverted", "fields": ["testInverted"] }
+  }
+}, {
+  "name": "Test",
+  "indexes": {
+    "testDefault": { "type": "default", "fields": ["testDefault"] },
+    "testUnique": { "type": "default", "fields": ["testUnique"], "unique": true },
+    "testInverted": { "type": "inverted", "fields": ["testInverted"] },
+    "testSubIndex": { "type": "link", "rel": "HAS_A", "table": "Test", "indexes": {
+      "testDefault": { "type": "default", "fields": ["testDefault"] },
+      "testInverted": { "type": "inverted", "fields": ["testInverted"] },
+      "testSubIndex": { "type": "link", "rel": "IS_A", "table": "Test", "indexes": {
+        "testDefault": { "type": "default", "fields": ["testDefault"] }
+      }}
+    }}
+  }
+}]
