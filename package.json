@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "NODE_ENV=test rm -rf /tmp/test-db && c8 node t.js"
+    "test": "NODE_ENV=test rm -rf /tmp/test-db && c8 node test/index.js"
   },
   "keywords": [],
   "author": "",
@@ -18,7 +18,7 @@
     "uuid": "3.3.2"
   },
   "devDependencies": {
-    "c8": "^3.4.0",
+    "c8": "3.4.0",
     "level": "4.0.0"
   }
 }
