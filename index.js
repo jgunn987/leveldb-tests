@@ -472,7 +472,6 @@ function queryScanTable(db, table, eval) {
       .on('data', async data => {
         const doc = JSON.parse(data.value);
         if(doc && await eval(db, doc)) {
-          console.log('here all');
           results.push(doc);
         }
       });
@@ -486,7 +485,6 @@ function queryScanIndex(db, indexStream) {
       .on('error', reject)
       .on('end', () => resolve(results))
       .on('data', data => {
-          console.log('here');
         results.push(data.value);
       });
   });
