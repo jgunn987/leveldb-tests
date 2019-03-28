@@ -68,19 +68,22 @@ latest schema        | %{table.name}/$schema/latest | {schema}
 schema versions      | %{table.name}/$schema:{schema.txid} | {schema}
 latest version       | %{table.name}:{doc.uuid} | {doc}
 versions log         | %{table.name}/$v/{doc.txid}:{doc.uuid} | {doc}
-default index        | %{table.name}/$i/{index.name}:{field.name}={field.value}:{doc.uuid} | @{doc.uuid} | {doc}
-unique indexes       | %{table.name}/$i/{index.name}:{field.name}={field.value} | @{doc.uuid} | {doc}
-inverted indexes     | %{table.name}/$i/{index.name}:{field.name}={token}:{doc.uuid} | @{doc.uuid} | {doc}
-compound indexes     | %{table.name}/$i/{index.name}:{field1.name}={field1.value}&{field2.name}={field2.value}&{...}:{doc.uuid} | @{doc.uuid} | {doc}
-links                | %{table.name}/$@/{subject.uuid}:{subject.predicate}/$i/{index.name}:{field.name}{field.value}:{doc.uuid} | @{doc.uuid} | {doc}
+default index        | %{table.name}/$i/{index.name}:{value}:{doc.uuid} | @{doc.uuid} | {doc}
+unique indexes       | %{table.name}/$i/{index.name}:{value} | @{doc.uuid} | {doc}
+inverted indexes     | %{table.name}/$i/{index.name}:{token}:{doc.uuid} | @{doc.uuid} | {doc}
+compound indexes     | %{table.name}/$i/{index.name}:{value1}&{value2}&{...}:{doc.uuid} | @{doc.uuid} | {doc}
+links indexing       | %{table.name}/$@/{subject.uuid}:{subject.predicate}/$i/{index.name}:{value}:{doc.uuid} | @{doc.uuid} | {doc}
 
-graph links
-@sop/{subject.uuid}-{object.uuid}-{predicate} => {spo} |
-@spo/{subject.uuid}-{predicate}-{object.uuid} => {spo} |
-@pso/{predicate}-{subject.uuid}-{object.uuid} => {spo} |
-@pos/{predicate}-{object.uuid}-{subject.uuid} => {spo} |
-@ops/{object.uuid}-{predicate}-{subject.uuid} => {spo} | 
-@osp/{object.uuid}-{subject.uuid}-{predicate} => {spo} |
+graph links(hexastore)
+
+type | template | value
+-----|----------|-------
+sop  | @sop/{subject.uuid}-{object.uuid}-{predicate} | {spo}
+spo  | @spo/{subject.uuid}-{predicate}-{object.uuid} | {spo}
+pso  | @pso/{predicate}-{subject.uuid}-{object.uuid} | {spo}
+pos  | @pos/{predicate}-{object.uuid}-{subject.uuid} | {spo}
+ops  | @ops/{object.uuid}-{predicate}-{subject.uuid} | {spo}
+osp  | @osp/{object.uuid}-{subject.uuid}-{predicate} | {spo} 
 
 
 support query functions e.g
