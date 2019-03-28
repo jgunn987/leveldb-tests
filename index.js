@@ -37,7 +37,7 @@ function createDoc(doc) {
   return { 
     _id: doc._id || uuid.v4(), 
     _v: (+new Date()).toString(),
-    $links: doc.$links || { put: [], del: [] },
+    _links: doc._links || { put: [], del: [] },
     ...doc
   };
 }
@@ -213,7 +213,7 @@ function indexDocLinks(db, schema, doc) {
 }
 
 function indexDocOpLinks(db, schema, doc, type) {
-  return _.flatten(doc.$links[type].map(link => 
+  return _.flatten(doc._links[type].map(link => 
     link[0] && link[1] ? 
       createLinkOps(schema.name + ':' + doc._id, link[0], link[1], link[2] || {})
         .map(key => ({ type, ...key })) : undefined));

@@ -58,7 +58,7 @@
       "value": "string6"
     }
   },
-  "$links": {
+  "_links": {
     "put": [
       ["owns", "Car:1"]
     ],
