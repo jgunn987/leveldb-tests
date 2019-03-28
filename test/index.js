@@ -119,8 +119,11 @@ async function testDel() {
 async function testQuery() {
   const eqIndex = await db.query(queries[0]); 
   console.log(eqIndex);
+  assert.ok(eqIndex.length === 6);
+  assert.ok(typeof eqIndex[0] !== 'string');
   const orInMem = await db.query(queries[2]); 
-  console.log(orInMem);
+  assert.ok(eqIndex.length === 6);
+  assert.ok(typeof eqIndex[0] !== 'string');
 }
 
 async function testDropMigrate() {

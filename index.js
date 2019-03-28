@@ -89,20 +89,20 @@ function indexBaseKey(table, indexName) {
   return `%${table}/$i/${indexName}`;
 }
 
+function indexKey(table, indexName, value, uuid) {
+  return `${indexBaseKey(table, indexName)}:${value}` + (uuid ? ':' + uuid : '');
+}
+
 function docLatestBaseKey(table) {
-  return `%${table}/$latest`;
+  return `%${table}:`;
 }
 
 function docLatestKey(table, uuid) {
-  return `%${table}/$latest:${uuid}`;
+  return `${docLatestBaseKey(table)}:${uuid}`;
 }
   
 function docKey(table, uuid, version) {
   return `%${table}/$v/${version}:${uuid}`;
-}
-
-function indexKey(table, indexName, value, uuid) {
-  return `%${table}/$i/${indexName}:${value}` + (uuid ? ':' + uuid : '');
 }
 
 function sopKey(s, o, p) {
@@ -253,7 +253,7 @@ function invokeIndexer(db, schema, name, doc) {
 function defaultIndexer(db, schema, name, options, doc) {
   return [{ key: indexKey(schema.name, name, options.fields
       .map(field => jmespath.search(doc, field) || 'NULL').join('&'), 
-    !options.unique && doc._id), value: doc._id }]; 
+    !options.unique && doc._id), value: docLatestKey(schema.name, doc._id) }]; 
 }
 
 function invertedIndexer(db, schema, name, options, doc) {
@@ -486,12 +486,18 @@ function queryScanIndex(db, indexStream) {
     const results = [];
     indexStream(db)
       .on('error', reject)
-      .on('end', () => resolve(results))
+      .on('end', () => resolvePointers(db, results).then(resolve))
       .on('data', data => {
         results.push(data.value);
       });
   });
 } 
+
+function resolvePointers(db, results) {
+  return Promise.all(
+    results.map(r => typeof r === 'string' ? db.db.get(r) : r)
+  ).then(r => r.map(JSON.parse));
+}
 
 function docEq(db, doc, field, value) {
   return Promise.resolve(jmespath.search(doc, field) === value);
