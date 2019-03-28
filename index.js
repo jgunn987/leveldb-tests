@@ -59,7 +59,7 @@ function schemaLatestKey(table) {
 }
 
 function schemaKey(table, version) {
-  return `%${table}/$schema:${version}`;
+  return `${schemaLatestKey(table)}:${version}`;
 }
   
 function indexBaseKey(table, indexName) {
@@ -91,15 +91,19 @@ function linkKeyFirst(register, s) {
 }
 
 function createLinkOps(s, p, o, data) {
-  const value = JSON.stringify({ s, p, o, ...data });
-  return createLinkKeys(s, p, o).map(key => ({ key, value }));
+  const spo = { s, p, o, ...data };
+  const value = JSON.stringify(spo);
+  return createLinkKeys(spo).map(key => ({ key, value }));
 }
 
-function createLinkKeys(s, p, o) {
+function createLinkKeys(spo) {
   return [
-    linkKey('sop', s, o, p), linkKey('spo', s, p, o),
-    linkKey('pso', p, s, o), linkKey('pos', p, o, s),
-    linkKey('ops', o, p, s), linkKey('osp', o, s, p)
+    linkKey('sop', spo.s, spo.o, spo.p), 
+    linkKey('spo', spo.s, spo.p, spo.o),
+    linkKey('pso', spo.p, spo.s, spo.o), 
+    linkKey('pos', spo.p, spo.o, spo.s),
+    linkKey('ops', spo.o, spo.p, spo.s), 
+    linkKey('osp', spo.o, spo.s, spo.p)
   ];
 }
 
@@ -142,7 +146,6 @@ function indexAllDocs(db, schema, indexes = null) {
 
 function scanAllDocs(db, table) {
   const key = docLatestBaseKey(table);
-  console.log(key);
   return db.db.createReadStream({ gte: key, lt: key + '~' });
 }
 
@@ -155,8 +158,7 @@ async function dropAllDocLinks(db, schema, doc) {
   return batchStream(db,
     getConnectedLinksStreams(db, schema, doc)
       .pipe(transformer(function (data, enc, done) {
-        const spo = JSON.parse(data.value);
-        createLinkKeys(spo.s, spo.p, spo.o)
+        createLinkKeys(JSON.parse(data.value))
           .forEach(key => this.push({ type: 'del', key }));
         done();
       })));
@@ -469,9 +471,8 @@ function queryScanIndex(db, indexStream) {
 } 
 
 function resolvePointers(db, results) {
-  return Promise.all(
-    results.map(r => typeof r === 'string' ? db.db.get(r) : r)
-  ).then(r => r.map(JSON.parse));
+  return Promise.all(results.map(r => typeof r === 'string' ? db.db.get(r) : r))
+    .then(r => r.map(JSON.parse));
 }
 
 function docEq(db, doc, field, value) {
