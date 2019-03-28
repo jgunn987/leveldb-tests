@@ -50,35 +50,12 @@ function createSchema(schema) {
   };
 }
 
-function createLinkOps(s, p, o, data) {
-  const spo = JSON.stringify({ s, p, o, ...data });
-  return [
-    { key: sopKey(s, o, p), value: spo },
-    { key: spoKey(s, p, o), value: spo },
-    { key: psoKey(p, s, o), value: spo }, 
-    { key: posKey(p, o, s), value: spo },
-    { key: opsKey(o, p, s), value: spo }, 
-    { key: ospKey(o, s, p), value: spo }
-  ];
-}
-
-function createLinkKeys(s, p, o) {
-  return [
-    sopKey(s, o, p),
-    spoKey(s, p, o),
-    psoKey(p, s, o),
-    posKey(p, o, s),
-    opsKey(o, p, s),
-    ospKey(o, s, p)
-  ];
-}
-
 function metadataKey() {
   return `#metadata`;
 }
 
 function schemaLatestKey(table) {
-  return `%${table}/$schema/latest`;
+  return `%${table}/$schema`;
 }
 
 function schemaKey(table, version) {
@@ -98,35 +75,32 @@ function docLatestBaseKey(table) {
 }
 
 function docLatestKey(table, uuid) {
-  return `${docLatestBaseKey(table)}:${uuid}`;
+  return `${docLatestBaseKey(table)}${uuid}`;
 }
   
 function docKey(table, uuid, version) {
   return `%${table}/$v/${version}:${uuid}`;
 }
 
-function sopKey(s, o, p) {
-  return `@sop/${s}-${o}-${p}`;
+function linkKey(register, s, p, o) {
+  return `@${register}/${s}-${p}-${o}`;
 }
 
-function spoKey(s, p, o) {
-  return `@spo/${s}-${p}-${o}`;
+function linkKeyFirst(register, s) {
+  return `@${register}/${s}`;
 }
 
-function psoKey(p, s, o) {
-  return `@pso/${p}-${s}-${o}`;
+function createLinkOps(s, p, o, data) {
+  const value = JSON.stringify({ s, p, o, ...data });
+  return createLinkKeys(s, p, o).map(key => ({ key, value }));
 }
 
-function posKey(p, o, s) {
-  return `@pos/${p}-${o}-${s}`;
-}
-
-function opsKey(o, p, s) {
-  return `@ops/${o}-${p}-${s}`;
-}
-
-function ospKey(o, s, p) {
-  return `@osp/${o}-${s}-${p}`;
+function createLinkKeys(s, p, o) {
+  return [
+    linkKey('sop', s, o, p), linkKey('spo', s, p, o),
+    linkKey('pso', p, s, o), linkKey('pos', p, o, s),
+    linkKey('ops', o, p, s), linkKey('osp', o, s, p)
+  ];
 }
 
 function transformer(fn) {
@@ -168,6 +142,7 @@ function indexAllDocs(db, schema, indexes = null) {
 
 function scanAllDocs(db, table) {
   const key = docLatestBaseKey(table);
+  console.log(key);
   return db.db.createReadStream({ gte: key, lt: key + '~' });
 }
 
@@ -194,7 +169,7 @@ function getConnectedLinksStreams(db, schema, doc) {
 }
 
 function getLinkStream(db, schema, doc, register) {
-  const key = '@' + register + '/' + schema.name + ':' + doc._id;
+  const key = linkKeyFirst(register, docLatestKey(schema.name, doc._id)); 
   return db.db.createReadStream({ gte: key, lte: key + '~' });
 }
 
@@ -281,7 +256,7 @@ function runCreateStream(db, p, c) {
   return batchStream(db, indexAllDocs(db, c, compareIndices(c, p)));
 }
 
-function compareIndices(a, b, action) {
+function compareIndices(a, b) {
   return Object.keys(a.indexes).map(index =>
     !_.isEqual(a.indexes[index], b.indexes[index]) && index).filter(Boolean);
 }
@@ -668,11 +643,11 @@ class DB extends EventEmitter {
 
   async migrate(schema) {
     const candidate = createSchema(schema);
-    const exisiting = createSchema(this.schemas[candidate.name] || {});
+    const existing = createSchema(this.schemas[candidate.name] || {});
     const name = candidate.name;
-    
+
     try {
-      await runMigration(this, exisiting, candidate);
+      await runMigration(this, existing, candidate);
     } catch(err) {
       throw new Error(`failed to migrate table '${name}'`);
     }

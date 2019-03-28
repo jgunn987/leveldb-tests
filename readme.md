@@ -64,7 +64,7 @@ TODO: add schema support for embeddeing documents under index keys
 type                 | key template | value
 ---------------------|--------------|------
 count                | %{table.name}/$count | {int} 
-latest schema        | %{table.name}/$schema/latest | {schema}
+latest schema        | %{table.name}/$schema | {schema}
 schema versions      | %{table.name}/$schema:{schema.txid} | {schema}
 latest version       | %{table.name}:{doc.uuid} | {doc}
 versions log         | %{table.name}/$v/{doc.txid}:{doc.uuid} | {doc}
