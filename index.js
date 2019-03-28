@@ -82,12 +82,16 @@ function docKey(table, uuid, version) {
   return `%${table}/$v/${version}:${uuid}`;
 }
 
-function linkKey(register, s, p, o) {
-  return `@${register}/${s}-${p}-${o}`;
-}
-
 function linkKeyFirst(register, s) {
   return `@${register}/${s}`;
+}
+
+function linkKeyFirstSecond(register, s, p) {
+  return `${linkKeyFirst(register, s)}-${p}`;
+}
+
+function linkKey(register, s, p, o) {
+  return `${linkKeyFirstSecond(register, s, p)}-${o}`;
 }
 
 function createLinkOps(s, p, o, data) {
@@ -96,14 +100,14 @@ function createLinkOps(s, p, o, data) {
   return createLinkKeys(spo).map(key => ({ key, value }));
 }
 
-function createLinkKeys(spo) {
+function createLinkKeys({ s, p, o }) {
   return [
-    linkKey('sop', spo.s, spo.o, spo.p), 
-    linkKey('spo', spo.s, spo.p, spo.o),
-    linkKey('pso', spo.p, spo.s, spo.o), 
-    linkKey('pos', spo.p, spo.o, spo.s),
-    linkKey('ops', spo.o, spo.p, spo.s), 
-    linkKey('osp', spo.o, spo.s, spo.p)
+    linkKey('sop', s, o, p), 
+    linkKey('spo', s, p, o),
+    linkKey('pso', p, s, o), 
+    linkKey('pos', p, o, s),
+    linkKey('ops', o, p, s), 
+    linkKey('osp', o, s, p)
   ];
 }
 
@@ -171,7 +175,7 @@ function getConnectedLinksStreams(db, schema, doc) {
 }
 
 function getLinkStream(db, schema, doc, register) {
-  const key = linkKeyFirst(register, docLatestKey(schema.name, doc._id)); 
+  const key = linkKeyFirst(register, `${schema.name}:${doc._id}`); 
   return db.db.createReadStream({ gte: key, lte: key + '~' });
 }
 
