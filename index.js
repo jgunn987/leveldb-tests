@@ -179,8 +179,6 @@ function getLinkStream(db, schema, doc, register) {
   return db.db.createReadStream({ gte: key, lte: key + '~' });
 }
 
-//TODO: run the validator after indexing has taken place otherwise we
-//      are doing the same thing twice and it is a performance hit
 async function indexDoc(db, schema, doc, indexes = null) {
   await validateIndexOp(db, schema, doc, indexes);
   return (await generateIndexKeys(db, schema, doc, indexes))
@@ -232,9 +230,11 @@ function invokeIndexer(db, schema, name, doc) {
 }
 
 function defaultIndexer(db, schema, name, options, doc) {
-  return [{ key: indexKey(schema.name, name, options.fields
-      .map(field => jmespath.search(doc, field) || 'NULL').join('&'), 
-    !options.unique && doc._id), value: docLatestKey(schema.name, doc._id) }]; 
+  const fields = options.fields.map(f => jmespath.search(doc, f) || 'NULL').join('&');
+  return [{ 
+    key: indexKey(schema.name, name, fields, !options.unique && doc._id), 
+    value: docLatestKey(schema.name, doc._id)
+  }]; 
 }
 
 function invertedIndexer(db, schema, name, options, doc) {
@@ -294,9 +294,6 @@ async function del(db, table, uuid) {
   ]);
 }
 
-// query functions
-// ---------------
-
 function or(schema, f) {
   const parsed = f.expressions.map(e => parseFilter(schema, e));
   return [makeInMemOrClosure(parsed),
@@ -313,12 +310,6 @@ function makeInMemOrClosure(parsedExpressions) {
   };
 }
 
-// we need to hold a central set of all results
-// run every index in parallel and aggregate the results
-// as a set union. 
-// if there is one expression in the chain that doesn't have
-// an index then we need to run a full scan, which means we dont run
-// any index scans we run all through memory
 function makeIndexOrStream(parsedExpressions) {
   const withoutStream = parsedExpressions.find(e => !e[1]);
   return !withoutStream ? function (db) {
@@ -354,16 +345,11 @@ function makeInMemAndClosure(parsedExpressions) {
   };
 }
 
-// we can get away without a full scan if we have at least one index
-// as our resulting set will have to be in that index.
-// once scanned, we individually fetch the documents
-// for all in that index and run through the in memory evaluators
 function makeIndexAndStream(parsedExpressions, inmemPipeline) {
   const withStream = parsedExpressions.find(e => e[1]);
   return withStream ? function (db) {
     withStream[0](db)
       .pipe(transformer(async function (data, enc, done) {
-        // run through inmem pipeline, then add if success
         const parsed = JSON.parse(data);
         const doc = typeof data === 'string' ?
           await db.db.get(data) : data;
@@ -390,10 +376,6 @@ function makeIndexClosure(fn, key, ...values) {
   return (db) => fn(db, key, ...values);
 }
 
-// each filter returns an optional index based stream
-// and an in memory lambda. If no stream is present
-// then a full scan of the table will be chosen and
-// all filters will run thier in memory lambdas
 const filters = { and, or, eq };
 
 function parseFilter(schema, f) {
@@ -427,14 +409,6 @@ function parseQuery(schema, q) {
   return parseFilter(schema, q.filter);
 }
 
-// * get schema for query
-// * parse filters
-// * parse projections
-// * run main table query
-// * sort and limit main query
-// * run projection queries 
-// * sort and limit projection queries
-// * return results;
 function query(db, q) {
   const table = q.table;
   const parsed = parseQuery(db.schemas[table], q);
@@ -534,7 +508,6 @@ function indexLte(db, index, value) {
   return db.createReadStream({ lte: index + ':' + value });
 }
 
-// value must be a RegExp object
 function docMatch(db, doc, field, value) {
   return Promise.resolve(value.test(jmespath.search(doc, field)));
 }
@@ -542,10 +515,9 @@ function docMatch(db, doc, field, value) {
 function docSearch(db, doc, field, value) {
   const docTokens = tokenize(stringifyFieldRef(doc, field));
   const valTokens = tokenize(value);
-  // are vaTokens all inside docTokens?
+  return Promise.resolve(!!valTokens.find(t => !docTokens.includes(t)));
 }
 
-// add a match all or match any option
 function indexSearch(db, index, values) {
   const key = index + ':';
   return mergeStream(...tokenize(values).map(token =>
