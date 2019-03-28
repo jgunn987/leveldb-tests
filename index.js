@@ -468,14 +468,17 @@ function queryScanTable(db, table, eval) {
     const results = [];
     scanAllDocs(db, table)
       .on('error', reject)
-      .on('end', () => resolve(results))
-      .on('data', async data => {
-        const doc = JSON.parse(data.value);
-        if(doc && await eval(db, doc)) {
-          results.push(doc);
-        }
-      });
+      .on('end', () => 
+        Promise.all(results)
+          .then(r => r.filter(Boolean))
+          .then(resolve))
+      .on('data', data =>
+        results.push(evaluate(db, JSON.parse(data.value), eval)));
   });
+}
+
+async function evaluate(db, doc, eval) {
+  return await eval(db, doc) && doc;
 }
 
 function queryScanIndex(db, indexStream) {

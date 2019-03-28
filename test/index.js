@@ -118,7 +118,9 @@ async function testDel() {
 
 async function testQuery() {
   const eqIndex = await db.query(queries[0]); 
+  console.log(eqIndex);
   const orInMem = await db.query(queries[2]); 
+  console.log(orInMem);
 }
 
 async function testDropMigrate() {
