@@ -127,3 +127,36 @@ function testOrQuery() {
     .limit(100);
 }
 ```
+```javascript
+function testOrQuery() {
+  query('Entity',
+    filter([
+      union([ //OR
+        eq('name', 'james'),
+        eq('name', 'jame'),
+        eq('name', 'jam'),
+        eq('name', 'ja'),
+        eq('name', 'j'),
+        gt('age', 25), 
+        within('loc', '12.3458', '114.4489'),
+        without('loc', '12.3458', '114.4489'),
+        match('email', '*@{1}.*'),
+        intersection([ //AND
+          eq('name', 'gam'),
+          eq('name', 'ga'),
+          eq('name', 'g'),
+        ])
+      ])),
+    project('comments', 'Comment',
+        filter([ 
+          intersection([
+            search('text', 'Cool Beans'),
+            lte('number', 1),
+            eq('name', 'gam'),
+            eq('name', 'ga'),
+            eq('name', 'g'),
+          ])
+        ]),
+        projection('author', 'Author', filter([ eq('name', 'James') ])))
+}
+```
