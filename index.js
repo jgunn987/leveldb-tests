@@ -569,8 +569,7 @@ async function saveMetadata(db) {
 }
 
 async function loadSchemas(db) {
-  db.metadata.tables.forEach(async t =>
-    await db.loadSchema(db, t));
+  await Promise.all(db.metadata.tables.map(t => db.loadSchema(db, t)));
   return db;
 }
 

@@ -22,15 +22,8 @@
 }, {
   "name": "Test",
   "indexes": {
-    "testDefault": { "type": "default", "fields": ["testDefault"] },
+    "testDefault": { "type": "default", "fields": ["testDefault"], "embedded": true },
     "testUnique": { "type": "default", "fields": ["testUnique"], "unique": true },
-    "testInverted": { "type": "inverted", "fields": ["testInverted"] },
-    "testSubIndex": { "type": "link", "rel": "HAS_A", "table": "Test", "indexes": {
-      "testDefault": { "type": "default", "fields": ["testDefault"] },
-      "testInverted": { "type": "inverted", "fields": ["testInverted"] },
-      "testSubIndex": { "type": "link", "rel": "IS_A", "table": "Test", "indexes": {
-        "testDefault": { "type": "default", "fields": ["testDefault"] }
-      }}
-    }}
+    "testInverted": { "type": "inverted", "fields": ["testInverted"] }
   }
 }]
