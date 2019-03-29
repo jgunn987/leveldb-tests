@@ -126,37 +126,22 @@ function testOrQuery() {
     .order('date', 'asc')
     .limit(100);
 }
-```
-```javascript
-function testOrQuery() {
-  query('Entity',
-    filter([
-      union([ //OR
-        eq('name', 'james'),
-        eq('name', 'jame'),
-        eq('name', 'jam'),
-        eq('name', 'ja'),
-        eq('name', 'j'),
-        gt('age', 25), 
-        within('loc', '12.3458', '114.4489'),
-        without('loc', '12.3458', '114.4489'),
-        match('email', '*@{1}.*'),
-        intersection([ //AND
-          eq('name', 'gam'),
-          eq('name', 'ga'),
-          eq('name', 'g'),
-        ])
-      ])),
-    project('comments', 'Comment',
-        filter([ 
-          intersection([
-            search('text', 'Cool Beans'),
-            lte('number', 1),
-            eq('name', 'gam'),
-            eq('name', 'ga'),
-            eq('name', 'g'),
-          ])
-        ]),
-        projection('author', 'Author', filter([ eq('name', 'James') ])))
+
+function testMatchQuery() {
+  return match('a:Person', 'r1:*', 'b:Food', 'r2:from', 'c:Country')
+    .filter('a', q => 
+      q.union([
+        q.eq('name', 'james'),
+        q.eq('name', 'jame'),
+        q.eq('name', 'jam'),
+        q.eq('name', 'ja'),
+        q.eq('name', 'j')
+      ]))
+    .filter('b', q => 
+      q.eq('name', 'chocolate'))
+    .filter('c', q=>
+      q.eq('name', 'en_GB'))
+    .return('a', 'b', 'c');
 }
 ```
+

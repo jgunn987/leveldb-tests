@@ -9,6 +9,15 @@ const tokenizer = /[\W\d]+/;
 const vm = require('vm');
 const esprima = require('esprima');
 
+function deconsLinkQuery(s) {
+  return s.length < 3 ? [] : [s.slice(0, 3)].concat(
+    deconsLinkQuery(s.slice(2)));
+}
+
+console.log(deconsLinkQuery([
+  'Person', 'eats', 'Food', 'from', 'Country'
+]));
+
 function compareFunctions(a, b) {
   return _.isEqual(esprima.parse(a), esprima.parse(b));
 }
