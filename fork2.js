@@ -2,135 +2,138 @@ const _ = require('lodash');
 const jmespath = require('jmespath');
 const uuid = require('uuid');
 
-function entity(doc = {}) {
+function entity(e = {}) {
   return { 
-    _type: doc._type || 'Entity',
-    _id: doc._id || uuid.v4(), 
-    _v: doc._v || (+new Date()).toString(),
-    _links: doc._links || { put: [], del: [] },
-    ...doc
+    _type: e._type || 'Entity',
+    _id: e._id || uuid.v4(), 
+    _v: e._v || (+new Date()).toString(),
+    ...e
   };
 }
 
-function docBaseKey(doc) {
-  return `%${doc._type}:`;
+function generateLinkKeys(type) {
+  return link => {
+    const [s, sid] = link[0].split(':');
+    const [o, oid] = link[2].split(':');
+    const linkJSON = JSON.stringify(link);
+    return [
+      { type, key: `@pso/${link[1]}-${s}-${o}:${sid}:${oid}`, value: linkJSON },
+      { type, key: `@pos/${link[1]}-${o}-${s}:${sid}:${oid}`, value: linkJSON },
+      { type, key: `@spo/${s}-${link[1]}-${o}-${sid}:${oid}`, value: linkJSON },
+      { type, key: `@ops/${o}-${link[1]}-${s}:${sid}:${oid}`, value: linkJSON },
+      { type, key: `@sop/${s}-${o}-${link[1]}:${sid}:${oid}`, value: linkJSON },
+      { type, key: `@osp/${o}-${s}-${link[1]}:${sid}:${oid}`, value: linkJSON }
+    ];
+  };
 }
 
-function docLatestKey(doc) {
-  return `${docBaseKey(doc)}${doc._id}`;
-}
-  
-function docKey(doc) {
-  return `%${doc._type}/$v/${doc._v}:${doc._id}`;
-}
+const putLink = generateLinkKeys('put');
+const delLink = generateLinkKeys('del');
 
-function docTypeIdKey(doc) {
-  return `${doc._type}:${doc._id}`;
-}
-
-function linkKeyFirst(register, s) {
-  return `@${register}/${s}`;
-}
-
-function linkKeyFirstSecond(register, s, p) {
-  return `${linkKeyFirst(register, s)}-${p}`;
-}
-
-function linkKeyFirstSecondThird(register, s, p, o) {
-  return `${linkKeyFirstSecond(register, s, p)}-${o}`;
-}
-
-function linkKey(register, s, p, o, sid, oid) {
-  return `${linkKeyFirstSecondThird(register, s, p, o)}:${sid}:${oid}`;
-}
-
-function generateLinkKeys(link) {
-  const [stype, sid] = link[0].split(':');
-  const [otype, oid] = link[2].split(':');
+function put(e) {
+  const v = JSON.stringify(e);
   return [
-    [linkKey('spo', stype, link[1], otype, sid, oid), link],
-    [linkKey('sop', stype, otype, link[1], sid, oid), link],
-    [linkKey('pso', link[1], stype, otype, sid, oid), link],
-    [linkKey('pos', link[1], otype, stype, sid, oid), link],
-    [linkKey('ops', otype, link[1], stype, sid, oid), link],
-    [linkKey('osp', otype, stype, link[1], sid, oid), link]
+    { type: 'put', key: `%${e._type}:${e._id}`, value: v },
+    { type: 'put', key: `%${e._type}/$v/${e._v}:${e._id}`, value: v }
   ];
 }
 
-function generateLinkOps(type) {
-  return doc => _.flatten((doc._links[type] || [])
-    .map(l => [docTypeIdKey(doc)].concat(l))
-    .map(generateLinkKeys)
-    .map(l => l.map(k => ({ 
-        type, key: k[0], value: JSON.stringify(k[1]) 
-      }))));
+function get(e) {
+  return e._v === 'latest' ? 
+    `%${e._type}:${e._id}` : 
+    `%${e._type}/$v/${e._v}:${e._id}`;
 }
 
-const generatePutLinkOps = generateLinkOps('put');
-const generateDelLinkOps = generateLinkOps('del');
-
-function put(doc) {
-  const v = JSON.stringify(doc);
-  return [
-    { type: 'put', key: docLatestKey(doc), value: v },
-    { type: 'put', key: docKey(doc), value: v },
-    ...generatePutLinkOps(doc),
-    ...generateDelLinkOps(doc)
-  ];
-}
-
-function get(doc) {
-  return doc._v === 'latest' ? docLatestKey(doc) : docKey(doc);
-}
-
-function del(doc) {
-  return [{ type: 'put', key: docLatestKey(doc), value: 'null' }];
-}
-
-function deconsLinkQuery(s) {
-  return s.length < 3 ? [] : [s.slice(0, 3)].concat(
-    deconsLinkQuery(s.slice(2)));
+function del(e) {
+  return [{ type: 'put', key: `%${e._type}:${e._id}`, value: 'null' }];
 }
 
 const registerMap = {
-  '111': (m) => linkKeyFirstSecondThird('spo', m[0].type, m[1].type, m[2].type), 
-  '011': (m) => linkKeyFirstSecond('pos', m[1].type, m[2].type),
-  '001': (m) => linkKeyFirst('ops', m[2].type),
+  '111': (m) => `@spo/${m[0].type}-${m[1].type}-${m[2].type}`, 
+  '011': (m) => `@pos/${m[1].type}-${m[2].type}`,
+  '001': (m) => `@ops/${m[2].type}`,
   '000': (m) => `@spo/`,
-  '010': (m) => linkKeyFirst('pos', m[1].type),
-  '110': (m) => linkKeyFirstSecond('spo', m[0].type, m[1].type),
-  '100': (m) => linkKeyFirst('spo', m[0].type),
-  '101': (m) => linkKeyFirstSecond('sop', m[0].type, m[2].type),
+  '010': (m) => `@pos/${m[1].type}`,
+  '110': (m) => `@spo/${m[0].type}-${m[1].type}`,
+  '100': (m) => `@spo/${m[0].type}`,
+  '101': (m) => `@sop/${m[0].type}-${m[2].type}`,
 };
 
-function getRegister(m) {
+const filters = {
+  'and': filter => {
+    const fns = filter.value.map(getFilterFn);
+    return e => fns.every(fn => fn(e));
+  },
+  'or': filter => {
+    const fns = filter.value.map(getFilterFn);
+    return e => fns.some(fn => fn(e));
+  },
+  'eq': filter => e => e[filter.field] === filter.value,
+  'neq': filter => e => e[filter.field] !== filter.value,
+  'gt': filter => e => e[filter.field] > filter.value,
+  'gte': filter => e => e[filter.field] >= filter.value,
+  'lt': filter => e => e[filter.field] < filter.value,
+  'lte': filter => e => e[filter.field] <= filter.value,
+  'exists': filter => e => filter.field in e,
+  'nexists': filter => e => !(filter.field in e),
+  'nop': filter => e => true
+};
+
+function getFilterFn(filter) {
+  return filter.type in filters ? 
+    filters[filter.type](filter) :
+    filters.nop();
+}
+
+function getQueryMatchRegister(m) {
   return registerMap[
     (+(m[0] && m[0].type !== '*')).toString() +
     (+(m[1] && m[1].type !== '*')).toString() +
     (+(m[2] && m[2].type !== '*')).toString()](m);
 }
 
-function getQueryMatchRegisters(m) {
-  return getRegister(m);
+function deconsQueryLinks(s) {
+  return s.length < 3 ? [] : [s.slice(0, 3)].concat(
+    deconsQueryLinks(s.slice(2)));
+}
+
+function compileQueryLinks(match) {
+  return match.map(p => Object.assign({}, p, { 
+    filter: getFilterFn(p.filter), 
+    seen: new Set(),
+    results: [], 
+  }));
+}
+
+function compileQueryOps(q) {
+  return deconsQueryLinks(compileQueryLinks(q.match))
+    .map(p => db => new Promise((resolve, reject) => {
+      const qs = getQueryMatchRegister(p);
+      db.createReadStream({ gte: qs, lte: qs + '~' })
+        .on('end', () => resolve(p))
+        .on('error', reject)
+        .on('data', data => {
+          const link = JSON.parse(data.value);
+          if(!p[0].seen.has(link[0])) {
+            p[0].seen.add(link[0]);
+            p[0].results.push(link[0]);
+          }
+
+          if(!p[1].seen.has(link[1])) {
+            p[1].seen.add(link[1]);
+            p[1].results.push(link[1]);
+          }
+
+          if(!p[2].seen.has(link[2])) {
+            p[2].seen.add(link[2]);
+            p[2].results.push(link[2]);
+          }
+        });
+    })); 
 }
 
 function query(q) {
-  return deconsLinkQuery(q)
-    .map(p => db => {
-      const reg = getQueryMatchRegisters(p);
-      db.createReadStream({ gte: reg, lte: reg + '~' })
-        .on('data', async data => {
-          const link = JSON.parse(data.value);
-          const [stype, sid] = link[0].split(':');
-          const [otype, oid] = link[2].split(':');
-          const s = JSON.parse(await db.get(get(entity({ 
-            _type: stype, _id: sid, _v: 'latest' 
-          }))));
-          const o = JSON.parse(await db.get(get(entity({ 
-            _type: otype, _id: oid, _v: 'latest' 
-          }))));
-        });
-    });
+  return db => compileQueryOps(q).map(fn => fn(db));
 }
 
 const assert = require('assert');
@@ -138,31 +141,54 @@ const level = require('level');
 const db = level('/tmp/graph-db-test');
 
 (async function () {
-  const sue = entity({ _id: 1, _type: 'Person', name: 'Sue', _links: { 
-    put: [
-      ['loves', 'Person:1'],
-      ['likes', 'Person:2']
-    ]
-  } });
-  const james = entity({ _id: 2, _type: 'Person', details: { name: 'James' }, _links: { 
-    put: [
-      ['likes', 'Person:1']
-    ]
-  } });
+  await db.batch([
+    ...put(entity({ _id: 1, _type: 'Person', name: 'James' })),
+    ...put(entity({ _id: 2, _type: 'Person', name: 'Sue' })),
+    ...put(entity({ _id: 1, _type: 'Food', type: 'Banana' })),
+    ...putLink(['Person:1', 'likes', 'Person:2']),
+    ...putLink(['Person:1', 'hates', 'Food:1']),
+    ...putLink(['Person:2', 'hates', 'Food:1']),
+  ]);
 
+  const q = query({
+    match:[
+      { tag: 'a', type: 'Person', filter: {
+        type: 'and', value: [
+          { type: 'eq', field: 'name', value: 'James' },
+          { type: 'neq', field: 'name', value: 'Jam' },
+          { type: 'neq', field: 'name', value: 'Ja' },
+          { type: 'neq', field: 'name', value: 'Jaes' },
+        ]
+      } },
+      { tag: 'r', type: 'likes', filter: {} }, 
+      { tag: 'b', type: 'Person', filter: {
+        type: 'and', value: [
+          { type: 'eq', field: 'name', value: 'Sue' },
+        ]
+      } },
+      { tag: 'r2', type: 'hates', filter: {} },
+      { tag: 'c', type: 'Food', filter: {
+        type: 'eq', field: 'type', value: 'Banana'
+      } }
+    ],
+    get: ['a']
+  })(db);
 
-  await db.batch(put(sue));
-  await db.batch(put(james));
-
-  get(entity({ _id: 1, _v: 'latest' }));
-  del(entity({ _id: 1 }));
-//db.createReadStream().on('data', console.log);
-  query([
-    { tag: 'a', type: 'Person', filter: [
-      { type: 'eq', field: 'name', values: ['James'] }
-    ] },
-    { tag: 'r', type: 'likes' }, 
-    { tag: 'b', type: 'Person' },
-  ])[0](db)
+  Promise.all(q).then(console.log);
 
 })();
+/*
+query([
+  subject('Person', 'a', and([
+    eq('name', 'James'),
+    eq('age', 'James'),
+    eq('number', 'James'),
+    eq('dob', 'James'),
+    eq('sign', 'James'),
+  ]))
+  .predicate('Likes', 'b')
+  .object('*', 'c', or([
+    eq('name', 'Sue'),
+    eq('age', 'James'),
+  ]))
+], ['a', 'c']);*/
