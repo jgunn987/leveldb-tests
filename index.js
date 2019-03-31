@@ -14,10 +14,6 @@ function deconsLinkQuery(s) {
     deconsLinkQuery(s.slice(2)));
 }
 
-console.log(deconsLinkQuery([
-  'Person', 'eats', 'Food', 'from', 'Country'
-]));
-
 function compareFunctions(a, b) {
   return _.isEqual(esprima.parse(a), esprima.parse(b));
 }
