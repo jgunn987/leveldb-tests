@@ -20,6 +20,7 @@ function transformer(fn) {
     ...putLink(['Person:1', 'likes', 'Person:2']),
     ...putLink(['Person:1', 'hates', 'Food:1']),
     ...putLink(['Person:2', 'hates', 'Food:1']),
+    ...putLink(['Person:0', 'likes', 'Food:1']),
     ...putLink(['Person:3', 'hates', 'Food:1']),
   ]);
 
@@ -45,7 +46,7 @@ function transformer(fn) {
       } }
     ],
     output: ['a', 'b', 'c']
-  })
+  });
 
   function scan(qs) {
     return db.createReadStream({      
@@ -63,7 +64,23 @@ function transformer(fn) {
     }))));
   }
 
-  q(scan)(fetch);
+  console.log(await q(scan)(fetch));
+
+  const q2 = query({
+    match:[
+      { tag: 'a', type: 'Person', filter: {
+        type: 'and', value: [
+          { type: 'eq', field: 'name', value: 'James' },
+          { type: 'neq', field: 'name', value: 'Jam' },
+          { type: 'neq', field: 'name', value: 'Ja' },
+          { type: 'neq', field: 'name', value: 'Jaes' },
+        ]
+      } },
+    ],
+    output: ['a']
+  });
+
+  console.log(await q2(scan)(fetch));
 
 })();
 

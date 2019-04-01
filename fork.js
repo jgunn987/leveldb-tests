@@ -30,14 +30,14 @@ function put(e) {
   const v = JSON.stringify(e);
   return [
     { type: 'put', key: `%${e._type}:${e._id}`, value: v },
-    { type: 'put', key: `%${e._type}/$v/${e._v}:${e._id}`, value: v }
+    { type: 'put', key: `#${e._type}:${e._v}:${e._id}`, value: v }
   ];
 }
 
 function get(e) {
   return e._v === 'latest' ? 
     `%${e._type}:${e._id}` : 
-    `%${e._type}/$v/${e._v}:${e._id}`;
+    `#${e._type}:${e._v}:${e._id}`;
 }
 
 function del(e) {
@@ -74,14 +74,14 @@ const filters = {
     const fns = filter.value.map(getFilterFn);
     return e => fns.some(fn => fn(e)) ? e : false;
   },
-  'eq': filter => e => e[filter.field] === filter.value ? e : false,
-  'neq': filter => e => e[filter.field] !== filter.value ? e : false,
-  'gt': filter => e => e[filter.field] > filter.value ? e : false,
-  'gte': filter => e => e[filter.field] >= filter.value ? e : false,
-  'lt': filter => e => e[filter.field] < filter.value ? e : false,
-  'lte': filter => e => e[filter.field] <= filter.value ? e : false,
-  'exists': filter => e => filter.field in e ? e : false,
-  'nexists': filter => e => !(filter.field in e) ? e : false,
+  'eq': filter => e => _.get(e, filter.field) === filter.value ? e : false,
+  'neq': filter => e => _.get(e, filter.field) !== filter.value ? e : false,
+  'gt': filter => e => _.get(e, filter.field) > filter.value ? e : false,
+  'gte': filter => e => _.get(e, filter.field) >= filter.value ? e : false,
+  'lt': filter => e => _.get(e, filter.field) < filter.value ? e : false,
+  'lte': filter => e => _.get(e, filter.field) <= filter.value ? e : false,
+  'exists': filter => e => _.has(e, filter.field) ? e : false,
+  'nexists': filter => e => !_.has(e, filter.field) ? e : false,
   'nop': filter => e => e
 };
 
@@ -192,24 +192,43 @@ function execQuery(spo) {
         ops.push(processor(triple));
       })
       .on('end', () => {
-        Promise.all(ops)
-          .then(postProcessor)
+        Promise.all(ops).then(postProcessor)
           .then(resolve);
       });
   });
 }
 
+function execSingleQuery(q) {
+  return scan => fetch => new Promise((resolve, reject) => {
+    const docs = [];
+    const filter = getFilterFn(q.match[0].filter);
+    const qs = q.match[0].type === '*' ? 
+      '%' : `%${q.match[0].type}:`;
+
+    scan(qs).on('error', reject)
+      .on('end', () => resolve(docs))
+      .on('data', e => {
+        if(filter(e)) docs.push(e);
+      });
+  });
+}
+
 function query(q) {
-  const prepared = assembleQuery(q);
-  const pipeline = prepared.match.map(m => execQuery(m));
+  if(q.match.length === 1) {
+    return q.output && q.output.indexOf(q.match[0].tag) !== -1 ?
+      scan => fetch => execSingleQuery(q)(scan)(fetch):
+      scan => fetch => Promise.resolve([]);
+  }
+
   // (first triple) collects subjects, collects objects
   // (> first triple) filters subjects, collects objects
-  // if at any point in any query no subjects are found, return empty
-  return scan => fetch => {
+  // if at any point in any query no objects are found, return empty
+  const prepared = assembleQuery(q);
+  const pipeline = prepared.match.map(m => execQuery(m));
+  return scan => fetch => 
     Promise.all(pipeline.map(p => p(scan)(fetch)))
-      .then(console.log);
-  };
-  //const result = disassembleQuery(prepared);
+      .then(match => Object.assign({}, prepared, { match }))
+      .then(disassembleQuery);
 }
 
 module.exports = {
