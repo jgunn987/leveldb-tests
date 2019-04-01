@@ -242,10 +242,10 @@ function query(q) {
       scan => fetch => Promise.resolve([]);
   }
 
+  if((q.match.length - 1) % 3 !== 0) {
+    return scan => fetch => Promise.resolve([]);
+  }
 
-  // (first triple) collects subjects, collects objects
-  // (> first triple) filters subjects, collects objects
-  // if at any point in any query no objects are found, return empty
   const prepared = assembleQuery(q);
   const firstQuery = execQuery(prepared.match.shift())(processTriple);
   const pipeline = [firstQuery].concat(

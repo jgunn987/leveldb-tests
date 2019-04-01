@@ -48,10 +48,9 @@ function transformer(fn) {
       } },
       { tag: 'r2', type: 'from', filter: {} },
       { tag: 'd', type: 'Country', filter: {
-        type: 'eq', field: 'name', value: 'Brazil'
       } },
     ],
-    output: ['a', 'b', 'c', 'd']
+    output: ['a']
   });
 
   function scan(qs) {
