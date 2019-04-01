@@ -170,18 +170,33 @@ function processTriple(fetch) {
   };
 }
 
+function processResults(spo) {
+  return results => {
+    results.filter(Boolean).forEach(r => {
+      spo[0].results[r[0][0]] = r[0][1];
+      spo[1].results[r[1][0]] = r[1][1];
+      spo[2].results[r[2][0]] = r[2][1];
+    });
+    return spo;
+  };
+}
+
 function execQuery(spo) {
-  return scan => fetch => {
+  return scan => fetch => new Promise((resolve, reject) => {
     const ops = [];
     const processor = processTriple(fetch)(spo);
+    const postProcessor = processResults(spo);
     scan(getMatchQuery(spo))
+      .on('error', reject)
       .on('data', (triple) => {
-        ops.push(processor(triple).then(r => {
-          if(!r) return;
-          console.log(r);
-        }));
+        ops.push(processor(triple));
+      })
+      .on('end', () => {
+        Promise.all(ops)
+          .then(postProcessor)
+          .then(resolve);
       });
-  }
+  });
 }
 
 function query(q) {
@@ -190,8 +205,10 @@ function query(q) {
   // (first triple) collects subjects, collects objects
   // (> first triple) filters subjects, collects objects
   // if at any point in any query no subjects are found, return empty
-  return scan => fetch => pipeline[0](scan)(fetch);
-
+  return scan => fetch => {
+    Promise.all(pipeline.map(p => p(scan)(fetch)))
+      .then(console.log);
+  };
   //const result = disassembleQuery(prepared);
 }
 
