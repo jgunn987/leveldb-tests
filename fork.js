@@ -129,20 +129,31 @@ function disassembleQuery(q) {
 }
 
 function filterTriples(fetch) {
-  return spo => triple => {
-    const filter = filterTriple(fetch);
-    const filterp = filterTriplePredicate(fetch);
-    return Promise.all([
-      filter(spo[0])(triple[0]),
-      filterp(spo[1])(triple),
-      filter(spo[2])(triple[2])
-    ]).then(results => {
-      return [
-        [triple[0], results[0]],
-        [triple[1], results[1]],
-        [triple[2], results[2]]];
-    });
-  };
+  return spo => triple => Promise.all([
+    filterTriple(fetch)(spo[0])(triple[0]),
+    filterTriplePredicate(fetch)(spo[1])(triple),
+    filterTriple(fetch)(spo[2])(triple[2])
+  ]).then(results => [
+    [triple[0], results[0]],
+    [triple[1], results[1]],
+    [triple[2], results[2]]
+  ]);
+}
+
+function filterTriplesRest(fetch) {
+  return spo => triple => Promise.all([
+    filterTripleSubject(fetch)(spo[0])(triple[0]),
+    filterTriplePredicate(fetch)(spo[1])(triple),
+    filterTriple(fetch)(spo[2])(triple[2])
+  ]).then(results => [
+    [triple[0], results[0]],
+    [triple[1], results[1]],
+    [triple[2], results[2]]
+  ]);
+}
+
+function filterTripleSubject(fetch) {
+  return spo => id => spo.results[id];
 }
 
 function filterTriplePredicate(fetch) {
@@ -170,6 +181,17 @@ function processTriple(fetch) {
   };
 }
 
+function processTripleRest(fetch) {
+  return spo => triple => {
+    return filterTriplesRest(fetch)(spo)(triple)
+      .then(result => {
+        if(!result.find(r => !r[1])) {
+          return result;
+        }
+      });
+  };
+}
+
 function processResults(spo) {
   return results => {
     results.filter(Boolean).forEach(r => {
@@ -182,9 +204,9 @@ function processResults(spo) {
 }
 
 function execQuery(spo) {
-  return scan => fetch => new Promise((resolve, reject) => {
+  return processorFn => scan => fetch => new Promise((resolve, reject) => {
     const ops = [];
-    const processor = processTriple(fetch)(spo);
+    const processor = processorFn(fetch)(spo);
     const postProcessor = processResults(spo);
     scan(getMatchQuery(spo))
       .on('error', reject)
@@ -220,23 +242,29 @@ function query(q) {
       scan => fetch => Promise.resolve([]);
   }
 
+
   // (first triple) collects subjects, collects objects
   // (> first triple) filters subjects, collects objects
   // if at any point in any query no objects are found, return empty
   const prepared = assembleQuery(q);
-  const pipeline = prepared.match.map(m => execQuery(m));
-  return scan => fetch => 
-    Promise.all(pipeline.map(p => p(scan)(fetch)))
-      .then(match => Object.assign({}, prepared, { match }))
-      .then(disassembleQuery);
+  const firstQuery = execQuery(prepared.match.shift())(processTriple);
+  const pipeline = [firstQuery].concat(
+    prepared.match.map(m => execQuery(m)(processTripleRest)));
+
+  return scan => async fetch => {
+    const match = [];
+    for(let query of pipeline) {
+      match.push(await query(scan)(fetch));
+    }
+    return disassembleQuery(
+      Object.assign({}, prepared, { match }));
+  };
 }
 
 module.exports = {
   entity,
-  put,
+  put, get, del,
   putLink: generateLinkKeys('put'),
-  get,
-  del,
   delLink: generateLinkKeys('del'),
   query
 };

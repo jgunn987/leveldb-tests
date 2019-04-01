@@ -14,14 +14,16 @@ function transformer(fn) {
     ...put(entity({ _id: 0, _type: 'Person', name: 'God' })),
     ...put(entity({ _id: 1, _type: 'Person', name: 'James' })),
     ...put(entity({ _id: 2, _type: 'Person', name: 'Sue' })),
-    ...put(entity({ _id: 3, _type: 'Person', name: 'Sue' })),
+    ...put(entity({ _id: 3, _type: 'Person', name: 'Suey' })),
     ...put(entity({ _id: 1, _type: 'Food', type: 'Banana' })),
+    ...put(entity({ _id: 1, _type: 'Country', name: 'Brazil' })),
     ...putLink(['Person:0', 'likes', 'Person:1']),
     ...putLink(['Person:1', 'likes', 'Person:2']),
     ...putLink(['Person:1', 'hates', 'Food:1']),
     ...putLink(['Person:2', 'hates', 'Food:1']),
     ...putLink(['Person:0', 'likes', 'Food:1']),
     ...putLink(['Person:3', 'hates', 'Food:1']),
+    ...putLink(['Food:1', 'from', 'Country:1']),
   ]);
 
   const q = query({
@@ -43,9 +45,13 @@ function transformer(fn) {
       { tag: 'r2', type: 'hates', filter: {} },
       { tag: 'c', type: 'Food', filter: {
         type: 'eq', field: 'type', value: 'Banana'
-      } }
+      } },
+      { tag: 'r2', type: 'from', filter: {} },
+      { tag: 'd', type: 'Country', filter: {
+        type: 'eq', field: 'name', value: 'Brazil'
+      } },
     ],
-    output: ['a', 'b', 'c']
+    output: ['a', 'b', 'c', 'd']
   });
 
   function scan(qs) {
