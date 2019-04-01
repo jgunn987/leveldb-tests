@@ -100,36 +100,60 @@ function deconsQueryLinks(s) {
 function compileQueryLinks(match) {
   return match.map(p => Object.assign({}, p, { 
     filter: getFilterFn(p.filter), 
-    seen: new Set(),
-    results: [], 
+    results: {} 
   }));
+}
+
+function getNode(db) {
+  return async l => {
+    const [_type, _id] = l.split(':');
+    return JSON.parse(await db.get(get(entity({
+      _id, _type, _v: 'latest'
+    }))));
+  };
+}
+
+function getAll(db) {
+  return q => link => {
+    Promise.all([
+      link[0] in q[0].results ?
+        q[0].results[link[0]] : getNode(db)(link[0]),
+      link[1] in q[1].results ?
+        q[1].results[link[1]] : link[3] || {},
+      link[2] in q[2].results ?
+        q[2].results[link[2]] : getNode(db)(link[2])
+    ]);
+  };
+}
+
+function filterAll(q) {
+  return link => spo => {
+    if(q[0].filter(spo[0]) &&
+       q[1].filter(spo[1]) &&
+       q[2].filter(spo[2])) {
+      q[0].results[link[0]] = spo[0];
+      q[1].results[link[1]] = spo[1];
+      q[2].results[link[2]] = spo[2];
+    }
+    return q;
+  };
+}
+
+function createQueryOp(db) {
+  return q => qs => new Promise((resolve, reject) =>
+    db.createReadStream({ gte: qs, lte: qs + '~' })
+      .on('end', () => resolve(q))
+      .on('error', reject)
+      .on('data', data => {
+        const link = JSON.parse(data.value);
+        getAll(db)(q)(link)
+          .then(filterAll(q)(link));
+      }));
 }
 
 function compileQueryOps(q) {
   return deconsQueryLinks(compileQueryLinks(q.match))
-    .map(p => db => new Promise((resolve, reject) => {
-      const qs = getQueryMatchRegister(p);
-      db.createReadStream({ gte: qs, lte: qs + '~' })
-        .on('end', () => resolve(p))
-        .on('error', reject)
-        .on('data', data => {
-          const link = JSON.parse(data.value);
-          if(!p[0].seen.has(link[0])) {
-            p[0].seen.add(link[0]);
-            p[0].results.push(link[0]);
-          }
-
-          if(!p[1].seen.has(link[1])) {
-            p[1].seen.add(link[1]);
-            p[1].results.push(link[1]);
-          }
-
-          if(!p[2].seen.has(link[2])) {
-            p[2].seen.add(link[2]);
-            p[2].results.push(link[2]);
-          }
-        });
-    })); 
+    .map(p => db => createQueryOp(db)(p)(getQueryMatchRegister(p)))
 }
 
 function query(q) {
@@ -174,21 +198,9 @@ const db = level('/tmp/graph-db-test');
     get: ['a']
   })(db);
 
-  Promise.all(q).then(console.log);
+  Promise.all(q).then(r => {
+      setTimeout(() =>
+        console.log(r.map(q => q.map(p => p.results))), 1000);
+  });
 
 })();
-/*
-query([
-  subject('Person', 'a', and([
-    eq('name', 'James'),
-    eq('age', 'James'),
-    eq('number', 'James'),
-    eq('dob', 'James'),
-    eq('sign', 'James'),
-  ]))
-  .predicate('Likes', 'b')
-  .object('*', 'c', or([
-    eq('name', 'Sue'),
-    eq('age', 'James'),
-  ]))
-], ['a', 'c']);*/
