@@ -1,133 +1,206 @@
 const _ = require('lodash');
-const jmespath = require('jmespath');
 const uuid = require('uuid');
 
-function createDoc(doc = {}) {
+function entity(e = {}) {
   return { 
-    _id: doc._id || uuid.v4(), 
-    _v: (+new Date()).toString(),
-    _links: doc._links || { put: [], del: [] },
-    ...doc
+    _type: e._type || 'Entity',
+    _id: e._id || uuid.v4(), 
+    _v: e._v || (+new Date()).toString(),
+    ...e
   };
 }
 
-function docLatestBaseKey(type) {
-  return `%${type}:`;
+function generateLinkKeys(type) {
+  return link => {
+    const [s, sid] = link[0].split(':');
+    const [o, oid] = link[2].split(':');
+    const linkJSON = JSON.stringify(link);
+    return [
+      { type, key: `@pso/${link[1]}-${s}-${o}:${sid}:${oid}`, value: linkJSON },
+      { type, key: `@pos/${link[1]}-${o}-${s}:${sid}:${oid}`, value: linkJSON },
+      { type, key: `@spo/${s}-${link[1]}-${o}-${sid}:${oid}`, value: linkJSON },
+      { type, key: `@ops/${o}-${link[1]}-${s}:${sid}:${oid}`, value: linkJSON },
+      { type, key: `@sop/${s}-${o}-${link[1]}:${sid}:${oid}`, value: linkJSON },
+      { type, key: `@osp/${o}-${s}-${link[1]}:${sid}:${oid}`, value: linkJSON }
+    ];
+  };
 }
 
-function docLatestKey(type, uuid) {
-  return `${docLatestBaseKey(type)}${uuid}`;
-}
-  
-function docKey(type, uuid, version) {
-  return `%${type}/$v/${version}:${uuid}`;
-}
-
-function linkKeyFirst(register, s) {
-  return `@${register}/${s}`;
-}
-
-function linkKeyFirstSecond(register, s, p) {
-  return `${linkKeyFirst(register, s)}-${p}`;
-}
-
-function linkKeyFirstSecondThird(register, s, p, o) {
-  return `${linkKeyFirstSecond(register, s, p)}-${o}`;
-}
-
-function linkKey(register, s, p, o, sid, oid) {
-  return `${linkKeyFirstSecondThird(register, s, p, o)}:${sid}:${oid}`;
-}
-
-function generateLinkKeys(link) {
-  const [stype, sid] = link[0].split(':');
-  const [otype, oid] = link[2].split(':');
+function put(e) {
+  const v = JSON.stringify(e);
   return [
-    linkKey('spo', stype, link[1], otype, sid, oid),
-    linkKey('sop', stype, otype, link[1], sid, oid), 
-    linkKey('pso', link[1], stype, otype, sid, oid),
-    linkKey('pos', link[1], otype, stype, sid, oid),
-    linkKey('ops', otype, link[1], stype, sid, oid), 
-    linkKey('osp', otype, stype, link[1], sid, oid)
+    { type: 'put', key: `%${e._type}:${e._id}`, value: v },
+    { type: 'put', key: `%${e._type}/$v/${e._v}:${e._id}`, value: v }
   ];
 }
 
-function linkOp(sid, type) {
-  return link => {
-    const fullLink = [sid].concat(link);
-    const fullLinkJSON = JSON.stringify(fullLink);
-    return generateLinkKeys(fullLink)
-      .map(key => ({ type, key, value: fullLinkJSON }));
+function get(e) {
+  return e._v === 'latest' ? 
+    `%${e._type}:${e._id}` : 
+    `%${e._type}/$v/${e._v}:${e._id}`;
+}
+
+function del(e) {
+  return [{ type: 'put', key: `%${e._type}:${e._id}`, value: 'null' }];
+}
+
+const queryMap = {
+  '111': (m) => `@spo/${m[0].type}-${m[1].type}-${m[2].type}`, 
+  '011': (m) => `@pos/${m[1].type}-${m[2].type}`,
+  '001': (m) => `@ops/${m[2].type}`,
+  '000': (m) => `@spo/`,
+  '010': (m) => `@pos/${m[1].type}`,
+  '110': (m) => `@spo/${m[0].type}-${m[1].type}`,
+  '100': (m) => `@spo/${m[0].type}`,
+  '101': (m) => `@sop/${m[0].type}-${m[2].type}`,
+};
+
+function getMatchQuery(m) {
+  return queryMap[matchKey(m)](m);
+}
+
+function matchKey(m) {
+  return (+(m[0] && m[0].type !== '*')).toString() +
+    (+(m[1] && m[1].type !== '*')).toString() +
+    (+(m[2] && m[2].type !== '*')).toString();
+}
+
+const filters = {
+  'and': filter => {
+    const fns = filter.value.map(getFilterFn);
+    return e => fns.every(fn => fn(e)) ? e : false;
+  },
+  'or': filter => {
+    const fns = filter.value.map(getFilterFn);
+    return e => fns.some(fn => fn(e)) ? e : false;
+  },
+  'eq': filter => e => e[filter.field] === filter.value ? e : false,
+  'neq': filter => e => e[filter.field] !== filter.value ? e : false,
+  'gt': filter => e => e[filter.field] > filter.value ? e : false,
+  'gte': filter => e => e[filter.field] >= filter.value ? e : false,
+  'lt': filter => e => e[filter.field] < filter.value ? e : false,
+  'lte': filter => e => e[filter.field] <= filter.value ? e : false,
+  'exists': filter => e => filter.field in e ? e : false,
+  'nexists': filter => e => !(filter.field in e) ? e : false,
+  'nop': filter => e => e
+};
+
+function getFilterFn(filter) {
+  return filter.type in filters && filter ? 
+    filters[filter.type](filter) :
+    filters.nop();
+}
+
+function compileMatches(m) {
+  return m.map(p => Object.assign({}, p, { 
+    filter: getFilterFn(p.filter), 
+    results: {} 
+  }));
+}
+
+function deconsMatches(m) {
+  return m.length < 3 ? [] : [m.slice(0, 3)].concat(
+    deconsMatches(m.slice(2)));
+}
+
+function reconsMatches(m) {
+  return _.flatten(m.map(p => [p[0], p[1]]))
+   .concat(_.last(_.last(m)));
+}
+
+function matchResults(m) {
+  return m.map(p => _.toPairs(p.results));
+}
+
+function assembleQuery(q) {
+  return Object.assign({}, q, {
+    match: deconsMatches(compileMatches(q.match))
+  });
+}
+
+function matchResults(m) {
+  return m.map(p => _.toPairs(p.results)
+    .map(item => item[1]));
+}
+
+function disassembleQuery(q) {
+  return matchResults(reconsMatches(q.match)
+    .filter(p => q.output.indexOf(p.tag) !== -1));
+}
+
+function filterTriples(fetch) {
+  return spo => triple => {
+    const filter = filterTriple(fetch);
+    const filterp = filterTriplePredicate(fetch);
+    return Promise.all([
+      filter(spo[0])(triple[0]),
+      filterp(spo[1])(triple),
+      filter(spo[2])(triple[2])
+    ]).then(results => {
+      return [
+        [triple[0], results[0]],
+        [triple[1], results[1]],
+        [triple[2], results[2]]];
+    });
   };
 }
 
-function generateLinkOps(sid, links) {
-  return _.flatten((links.put || []).map(linkOp(sid, 'put')))
-    .concat(_.flatten((links.del || []).map(linkOp(sid, 'del'))));
+function filterTriplePredicate(fetch) {
+  return spo => triple => 
+    triple[1] in spo.results ?
+      spo.results[triple[1]] :
+      spo.filter(triple[3] || {});
 }
 
-async function put(db, type, doc) {
-  const d = createDoc(doc);
-  const v = JSON.stringify(d);
-  await db.batch([
-    { type: 'put', key: docLatestKey(type, d._id), value: v },
-    { type: 'put', key: docKey(type, d._id, d._v), value: v },
-    ...generateLinkOps(type + ':' + d._id, d._links) 
-  ]);
-  return d._id;
+function filterTriple(fetch) {
+  return spo => async id => 
+    id in spo.results ?
+      spo.results[id] :
+      spo.filter(await fetch(id));
 }
 
-async function get(db, type, id, version) {
-  return JSON.parse(version ?
-    await db.get(docKey(type, id, version)):
-    await db.get(docLatestKey(type, id)));
+function processTriple(fetch) {
+  return spo => triple => {
+    return filterTriples(fetch)(spo)(triple)
+      .then(result => {
+        if(!result.find(r => !r[1])) {
+          return result;
+        }
+      });
+  };
 }
 
-async function del(db, type, id) {
-  return db.batch([{ type: 'put', key: docLatestKey(type, id), value: 'null' }]);
+function execQuery(spo) {
+  return scan => fetch => {
+    const ops = [];
+    const processor = processTriple(fetch)(spo);
+    scan(getMatchQuery(spo))
+      .on('data', (triple) => {
+        ops.push(processor(triple).then(r => {
+          if(!r) return;
+          console.log(r);
+        }));
+      });
+  }
 }
 
-function query(db, q) {
-  const path = deconsLinkQuery(q.match)
-    .map(m => m.map(p => _.reverse(p.split(':'))))
-    .map(m => linkKeyFirstSecondThird('spo', m[0][0], m[1][0], m[2][0]))
-    .map(m => db.createReadStream({ gte: m, lt: m + '~' }));
+function query(q) {
+  const prepared = assembleQuery(q);
+  const pipeline = prepared.match.map(m => execQuery(m));
+  // (first triple) collects subjects, collects objects
+  // (> first triple) filters subjects, collects objects
+  // if at any point in any query no subjects are found, return empty
+  return scan => fetch => pipeline[0](scan)(fetch);
 
-  path[0].on('data', console.log);
+  //const result = disassembleQuery(prepared);
 }
 
-function deconsLinkQuery(s) {
-  return s.length < 3 ? [] : [s.slice(0, 3)].concat(
-    deconsLinkQuery(s.slice(2)));
-}
-
-const assert = require('assert');
-const level = require('level');
-const db = level('/tmp/graph-db-test');
-
-Promise.all([
-  put(db, 'Entity', { name: 'James', _links: {
-    put: [['loves', 'Entity:1']]
-  } }),
-  put(db, 'Entity', { name: 'John', _links: {
-    put: [
-      ['hates', 'Entity:5'],
-      ['hates', 'Entity:6'],
-      ['hates', 'Entity:7'],
-      ['hates', 'Entity:8'],
-      ['hates', 'Entity:9'],
-    ]
-  } }),
-  put(db, 'Entity', { name: 'Sue' }),
-  put(db, 'Entity', { name: 'Tim' }),
-  put(db, 'Entity', { name: 'Joanne' }),
-  put(db, 'Entity', { name: 'Mark' }),
-]).then((ids) => {
-  query(db, {
-    match: ['a:Entity', 'hates', 'b:Entity'],
-    filters: [
-      { tag: 'a', filter: '' }
-    ]
-  });
-});
-
+module.exports = {
+  entity,
+  put,
+  putLink: generateLinkKeys('put'),
+  get,
+  del,
+  delLink: generateLinkKeys('del'),
+  query
+};
