@@ -114,7 +114,7 @@ function getNode(db) {
 }
 
 function getAll(db) {
-  return q => link => {
+  return q => link =>
     Promise.all([
       link[0] in q[0].results ?
         q[0].results[link[0]] : getNode(db)(link[0]),
@@ -123,7 +123,6 @@ function getAll(db) {
       link[2] in q[2].results ?
         q[2].results[link[2]] : getNode(db)(link[2])
     ]);
-  };
 }
 
 function filterAll(q) {
@@ -139,25 +138,40 @@ function filterAll(q) {
   };
 }
 
+function processQuery(db) {
+  return q => link => 
+    getAll(db)(q)(link).then(filterAll(q)(link));
+}
+
 function createQueryOp(db) {
-  return q => qs => new Promise((resolve, reject) =>
-    db.createReadStream({ gte: qs, lte: qs + '~' })
-      .on('end', () => resolve(q))
-      .on('error', reject)
-      .on('data', data => {
-        const link = JSON.parse(data.value);
-        getAll(db)(q)(link)
-          .then(filterAll(q)(link));
-      }));
+  return q => {
+    const qs = getQueryMatchRegister(q);
+    const qr = [];
+    return new Promise((resolve, reject) =>
+      db.createReadStream({ gte: qs, lte: qs + '~' })
+        .on('error', reject)
+        .on('data', data => {
+          qr.push(processQuery(db)(q)(JSON.parse(data.value)));
+        }).on('end', () => {
+          Promise.all(qr).then(() => resolve(q));
+        }));
+  };
 }
 
 function compileQueryOps(q) {
   return deconsQueryLinks(compileQueryLinks(q.match))
-    .map(p => db => createQueryOp(db)(p)(getQueryMatchRegister(p)))
+    .map(p => db => createQueryOp(db)(p))
 }
 
 function query(q) {
-  return db => compileQueryOps(q).map(fn => fn(db));
+  return async db => {
+    const result = await Promise.all(
+      compileQueryOps(q).map(fn => fn(db)
+    ));
+    return _.flatten(result.map(r => r
+      .filter(p => q.output.indexOf(p.tag) !== -1)
+      .map(p => _.toPairs(p.results))));
+  };
 }
 
 const assert = require('assert');
@@ -195,12 +209,33 @@ const db = level('/tmp/graph-db-test');
         type: 'eq', field: 'type', value: 'Banana'
       } }
     ],
-    get: ['a']
+    output: ['a', 'c']
   })(db);
 
-  Promise.all(q).then(r => {
-      setTimeout(() =>
-        console.log(r.map(q => q.map(p => p.results))), 1000);
+  q.then(r => {
+    console.log(r);
   });
 
 })();
+
+/*
+query([
+  match('a', 'Person', 
+    intersection([
+      eq('name', 'James'),
+      neq('age', '21')
+      union([
+        gt('length', 100),
+        lt('length', 200
+      ])
+    ])),
+  match('r', 'likes'),
+  match('b', 'Person', 
+    intersection([
+      eq('name', 'Sue')
+    ])),
+  match('r2', 'hates'),
+  match('c', 'Food', 
+    eq('type', 'Banana'))
+])(['a', 'c'])(db);
+*/
