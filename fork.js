@@ -204,20 +204,21 @@ function processResults(spo) {
 }
 
 function execQuery(spo) {
-  return processorFn => scan => fetch => new Promise((resolve, reject) => {
-    const ops = [];
-    const processor = processorFn(fetch)(spo);
-    const postProcessor = processResults(spo);
-    scan(getMatchQuery(spo))
-      .on('error', reject)
-      .on('data', (triple) => {
-        ops.push(processor(triple));
-      })
-      .on('end', () => {
-        Promise.all(ops).then(postProcessor)
-          .then(resolve);
-      });
-  });
+  return processorFn => scan => fetch => 
+    new Promise((resolve, reject) => {
+      const ops = [];
+      const processor = processorFn(fetch)(spo);
+      const postProcessor = processResults(spo);
+      scan(getMatchQuery(spo))
+        .on('error', reject)
+        .on('data', (triple) => {
+          ops.push(processor(triple));
+        })
+        .on('end', () => {
+          Promise.all(ops).then(postProcessor)
+            .then(resolve);
+        });
+    });
 }
 
 function execSingleQuery(q) {
@@ -235,14 +236,16 @@ function execSingleQuery(q) {
   });
 }
 
+function singularQuery(q) {
+  return q.output && q.output.indexOf(q.match[0].tag) !== -1 ?
+    scan => fetch => execSingleQuery(q)(scan)(fetch):
+    scan => fetch => Promise.resolve([]);
+}
+
 function query(q) {
   if(q.match.length === 1) {
-    return q.output && q.output.indexOf(q.match[0].tag) !== -1 ?
-      scan => fetch => execSingleQuery(q)(scan)(fetch):
-      scan => fetch => Promise.resolve([]);
-  }
-
-  if((q.match.length - 1) % 3 !== 0) {
+    return singularQuery(q);
+  } else if((q.match.length - 1) % 3 !== 0) {
     return scan => fetch => Promise.resolve([]);
   }
 
