@@ -1,0 +1,11 @@
+{
+  "Noun":  ["flight", "breeze", "trip", "morning"],
+  "Pronoun":  ["me", "i", "you", "it"],
+  "ProperNoun":  ["Alaska", "Baltimore", "Los Angeles", "Chicago", "United", "American"],
+  "Verb": ["is", "prefer", "like", "need", "want", "fly"],
+  "Adjective": ["cheapest", "non-stop", "first", "latest", "other", "direct"],
+  "Determiner":  ["the", "a", "an", "this", "these", "that"],
+  "Preposition":  ["from", "to", "on", "near"],
+  "Conjunction":  ["and", "or", "but"],
+  "AuxVerb": []
+}
