@@ -227,5 +227,5 @@ console.log(SentenceRule(TokenIterator([
   Verb({ id: 'drive' }),
   PrePosition({ id: 'in' }),
   AbstractNoun({ id: 'october' }),
-  Terminator({ id: '?' })
+  Terminator({ id: '.' })
 ])));
