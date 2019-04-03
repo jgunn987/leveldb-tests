@@ -216,11 +216,10 @@ console.log(SentenceRule(TokenIterator([
   PrePosition({ id: 'to' }),
   AbstractNoun({ id: 'thursday' }),
 
-  /*
   Verb({ id: 'go' }),
   PrePosition({ id: 'to' }),
   ConcreteNoun({ id: 'shop' }),
-*/
+
   Terminator({ id: '.' })
 ])));
 /*
