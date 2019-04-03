@@ -212,6 +212,7 @@ console.log(SentenceRule(TokenIterator([
   Verb({ id: 'smoke' }),
   ConcreteNoun({ id: 'weed' }),
   ConcreteNoun({ id: 'crack' }),
+  PrePosition({ id: 'at' }),
   PrePosition({ id: 'from' }),
   AbstractNoun({ id: 'tuesday' }),
   PrePosition({ id: 'to' }),
