@@ -52,7 +52,7 @@ function ConditionalSentenceRule(iter) {}
 function InterrogativeSentenceRule(iter) {}
 
 function SentenceRule(iter) {
-  let subject, predicate, current = iter.current();
+  let subject, predicates = [], current = iter.current();
   while(current) {
     switch(current.type) {
       case 'StartToken':
@@ -62,7 +62,7 @@ function SentenceRule(iter) {
       case 'ConcreteNoun':
       case 'AbstractNoun':
       case 'ProperNoun':
-        if(subject || predicate) {
+        if(subject || predicates.length) {
           throw ParserError(current);
         } else {
           subject = NounPhraseRule(iter);
@@ -70,15 +70,12 @@ function SentenceRule(iter) {
         }
         break;
       case 'Verb':
-        if(predicate) {
-          throw ParserError(current);
-        }
-        predicate = VerbPhraseRule(iter);
+        predicates.push(VerbPhraseRule(iter));
         current = iter.current();
         break;
       case 'Terminator':
         return SentenceExpr({
-          subject, predicate
+          subject, predicates
         });
       default:
         throw ParserError(current);
@@ -114,7 +111,9 @@ function VerbPhraseRule(iter) {
     switch(current.type) {
       case 'Verb':
         if(predicate) {
-          throw ParserError(current);
+          return VerbPhraseExpr({
+            predicate, objects
+          });
         }
         predicate = current;
         current = iter.next();
@@ -157,7 +156,9 @@ function PrePositionRule(iter) {
         break;
       case 'Verb':
         if(object) {
-          throw ParserError(current);
+          return PrePositionExpr({
+            positions, object
+          });
         }
         object = VerbPhraseRule(iter);
         current = iter.current();
