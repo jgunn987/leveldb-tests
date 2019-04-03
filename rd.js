@@ -147,6 +147,13 @@ function PrePositionRule(iter) {
         position = current;
         current = iter.next();
         break;
+      case 'Verb':
+        if(object) {
+          throw ParserError(current);
+        }
+        object = VerbPhraseRule(iter);
+        current = iter.current();
+        break;
       case 'Pronoun':
       case 'ConcreteNoun':
       case 'AbstractNoun':
@@ -208,5 +215,17 @@ console.log(SentenceRule(TokenIterator([
   ConcreteNoun({ id: 'weed' }),
   PrePosition({ id: 'to' }),
   AbstractNoun({ id: 'death' }),
+  Terminator({ id: '?' })
+])));
+
+console.log(SentenceRule(TokenIterator([
+  StartToken(),
+  Verb({ id: 'go' }),
+  PrePosition({ id: 'from' }),
+  Verb({ id: 'drink' }),
+  PrePosition({ id: 'to' }),
+  Verb({ id: 'drive' }),
+  PrePosition({ id: 'in' }),
+  AbstractNoun({ id: 'october' }),
   Terminator({ id: '?' })
 ])));
