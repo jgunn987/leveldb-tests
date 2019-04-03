@@ -42,6 +42,7 @@ const SentenceExpr = Expression('SentenceExpr');
 const CompoundSentenceExpr = Expression('CompoundSentenceExpr');
 const ConditionalSentenceExpr = Expression('ConditionalSentenceExpr');
 const InterrogativeSentenceExpr = Expression('InterrogativeSentenceExpr');
+const CompoundExpr = Expression('CompoundExpr');
 const NounPhraseExpr = Expression('NounPhraseExpr');
 const VerbPhraseExpr = Expression('VerbPhraseExpr');
 const PrePositionExpr = Expression('PrePositionExpr');
@@ -87,19 +88,24 @@ function SentenceRule(iter) {
 }
 
 function NounPhraseRule(iter) {
-  const current = iter.current();
-  switch(current.type) {
-    case 'Pronoun':
-    case 'ConcreteNoun':
-    case 'AbstractNoun':
-    case 'ProperNoun':
-      iter.next();
-      return NounPhraseExpr({
-        subject: current
-      });
-    default:
-      throw ParserError(current);
+  let subjects = [], current = iter.current();
+  while(current) {
+    switch(current.type) {
+      case 'Pronoun':
+      case 'ConcreteNoun':
+      case 'AbstractNoun':
+      case 'ProperNoun':
+        subjects.push(current);
+        current = iter.next();
+        break;
+      default:
+        if(!subjects.length) {
+          throw ParserError(current);
+        }
+        return NounPhraseExpr({ subjects });
+    }
   }
+  throw ParserError(current);
 }
 
 function VerbPhraseRule(iter) {
@@ -137,14 +143,16 @@ function VerbPhraseRule(iter) {
 }
 
 function PrePositionRule(iter) {
-  let position, object, current = iter.current();
+  let positions = [], object, current = iter.current();
   while(current) {
     switch(current.type) {
       case 'PrePosition':
-        if(position) {
-          throw ParserError(current);
+        if(object) {
+          return PrePositionExpr({
+            positions, object
+          });
         }
-        position = current;
+        positions.push(current);
         current = iter.next();
         break;
       case 'Verb':
@@ -169,7 +177,7 @@ function PrePositionRule(iter) {
           throw ParserError(current);
         }
         return PrePositionExpr({
-          position, object
+          positions, object
         });
     }
   }
@@ -177,6 +185,7 @@ function PrePositionRule(iter) {
 }
 
 
+/*
 try {
 console.log(SentenceRule(TokenIterator([
   StartToken(),
@@ -191,7 +200,30 @@ console.log(SentenceRule(TokenIterator([
   Verb({ id: 'smoke' }),
 ])));
 } catch(err) {}
+*/
 
+console.log(SentenceRule(TokenIterator([
+  StartToken(),
+  ProperNoun({ id: 'james' }),
+  ProperNoun({ id: 'stephen' }),
+  ProperNoun({ id: 'john' }),
+
+  Verb({ id: 'smoke' }),
+  ConcreteNoun({ id: 'weed' }),
+  ConcreteNoun({ id: 'crack' }),
+  PrePosition({ id: 'from' }),
+  AbstractNoun({ id: 'tuesday' }),
+  PrePosition({ id: 'to' }),
+  AbstractNoun({ id: 'thursday' }),
+
+  /*
+  Verb({ id: 'go' }),
+  PrePosition({ id: 'to' }),
+  ConcreteNoun({ id: 'shop' }),
+*/
+  Terminator({ id: '.' })
+])));
+/*
 console.log(SentenceRule(TokenIterator([
   StartToken(),
   ProperNoun({ id: 'james' }),
@@ -229,3 +261,4 @@ console.log(SentenceRule(TokenIterator([
   AbstractNoun({ id: 'october' }),
   Terminator({ id: '.' })
 ])));
+*/
