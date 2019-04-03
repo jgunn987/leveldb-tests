@@ -1,4 +1,7 @@
+const _ = require('lodash');
+const readline = require('readline');
 const assert = require('assert');
+const lexicon = require('./lexicon.json');
 
 function TokenIterator(tokens) {
   let cursor = 0;
@@ -25,18 +28,20 @@ function Expression(type) {
   return data => Object.assign({}, data, { type }); 
 }
 
-const StartToken = Token('StartToken');
-const ProperNoun = Token('ProperNoun');
-const AbstractNoun = Token('AbstractNoun');
-const ConcreteNoun = Token('ConcreteNoun');
-const ProNoun = Token('ProNoun');
-const PrePosition = Token('PrePosition');
-const Adjective = Token('Adjective');
-const Determiner = Token('Determiner');
-const Conjunction = Token('Conjunction');
-const Adverb = Token('Adverb');
-const Verb = Token('Verb');
-const Terminator = Token('Terminator');
+const types = {
+  StartToken: Token('StartToken'),
+  ProperNoun: Token('ProperNoun'),
+  AbstractNoun: Token('AbstractNoun'),
+  ConcreteNoun: Token('ConcreteNoun'),
+  ProNoun: Token('ProNoun'),
+  PrePosition: Token('PrePosition'),
+  Adjective: Token('Adjective'),
+  Determiner: Token('Determiner'),
+  Conjunction: Token('Conjunction'),
+  Adverb: Token('Adverb'),
+  Verb: Token('Verb'),
+  Terminator: Token('Terminator'),
+};
 
 const SentenceExpr = Expression('SentenceExpr');
 const CompoundSentenceExpr = Expression('CompoundSentenceExpr');
@@ -185,81 +190,43 @@ function PrePositionRule(iter) {
   throw ParserError(current);
 }
 
+const dict = _.fromPairs(_.toPairs(lexicon).map(pair =>
+  [pair[0], types[pair[1].type]({ id: pair[0] })]));
 
-/*
-try {
-console.log(SentenceRule(TokenIterator([
-  StartToken(),
-  ProperNoun({ id: 'james' })
-])));
-} catch(err) {}
+function REPL() {
+  readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
+  }).on('line', function(line){
+    const parts = line.split(' ');
+    console.log(SentenceRule(TokenIterator(parts.map(p => dict[p]))));
+  });
+}
 
-try {
-console.log(SentenceRule(TokenIterator([
-  StartToken(),
-  ProperNoun({ id: 'james' }),
-  Verb({ id: 'smoke' }),
-])));
-} catch(err) {}
-*/
-
-console.log(SentenceRule(TokenIterator([
-  StartToken(),
-  ProperNoun({ id: 'james' }),
-  ProperNoun({ id: 'stephen' }),
-  ProperNoun({ id: 'john' }),
-
-  Verb({ id: 'smoke' }),
-  ConcreteNoun({ id: 'weed' }),
-  ConcreteNoun({ id: 'crack' }),
-  PrePosition({ id: 'at' }),
-  PrePosition({ id: 'from' }),
-  AbstractNoun({ id: 'tuesday' }),
-  PrePosition({ id: 'to' }),
-  AbstractNoun({ id: 'thursday' }),
-
-  Verb({ id: 'go' }),
-  PrePosition({ id: 'to' }),
-  ConcreteNoun({ id: 'shop' }),
-
-  Terminator({ id: '.' })
-])));
-/*
-console.log(SentenceRule(TokenIterator([
-  StartToken(),
-  ProperNoun({ id: 'james' }),
-  Verb({ id: 'smoke' }),
-  ConcreteNoun({ id: 'weed' }),
-  Terminator({ id: '.' })
-])));
-
-console.log(SentenceRule(TokenIterator([
-  StartToken(),
-  Verb({ id: 'smoke' }),
-  ConcreteNoun({ id: 'weed' }),
-  PrePosition({ id: 'to' }),
-  AbstractNoun({ id: 'death' }),
-  Terminator({ id: '.' })
-])));
-
-console.log(SentenceRule(TokenIterator([
-  StartToken(),
-  Verb({ id: 'smoke' }),
-  ConcreteNoun({ id: 'weed' }),
-  PrePosition({ id: 'to' }),
-  AbstractNoun({ id: 'death' }),
-  Terminator({ id: '?' })
-])));
-
-console.log(SentenceRule(TokenIterator([
-  StartToken(),
-  Verb({ id: 'go' }),
-  PrePosition({ id: 'from' }),
-  Verb({ id: 'drink' }),
-  PrePosition({ id: 'to' }),
-  Verb({ id: 'drive' }),
-  PrePosition({ id: 'in' }),
-  AbstractNoun({ id: 'october' }),
-  Terminator({ id: '.' })
-])));
-*/
+function runTests() {
+  console.log(SentenceRule(TokenIterator(
+    'james .'
+    .split(' ').map(p => dict[p]))));
+  console.log(SentenceRule(TokenIterator(
+    'james smoke .'
+    .split(' ').map(p => dict[p]))));
+  console.log(SentenceRule(TokenIterator(
+    'james smoke weed .'
+    .split(' ').map(p => dict[p]))));
+  console.log(SentenceRule(TokenIterator(
+    'james smoke weed to death .'
+    .split(' ').map(p => dict[p]))));
+  console.log(SentenceRule(TokenIterator(
+    'james smoke weed to death ?'
+    .split(' ').map(p => dict[p]))));
+  console.log(SentenceRule(TokenIterator(
+    'james john james drink beer on thursday tuesday .'
+    .split(' ').map(p => dict[p]))));
+  console.log(SentenceRule(TokenIterator(
+    'james john james drink beer from thursday to tuesday drive to shop .'
+    .split(' ').map(p => dict[p]))));
+  console.log(SentenceRule(TokenIterator(
+    'go from drink to drive in october december .'
+    .split(' ').map(p => dict[p]))));
+}
