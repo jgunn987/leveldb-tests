@@ -16,11 +16,11 @@ function TokenIterator(tokens) {
 class ParserError extends Error {}
 
 function Token(type) {
-  return data => Object.assign({}, data, { type }); 
+  return data => ({ type, ...data }); 
 }
 
 function Expression(type) {
-  return data => Object.assign({}, data, { type }); 
+  return data => ({ type, ...data }); 
 }
 
 const types = {
@@ -51,8 +51,17 @@ function CompoundSentenceRule(iter) {}
 function ConditionalSentenceRule(iter) {}
 function InterrogativeSentenceRule(iter) {}
 
+function assign(v, value) {
+  if(v && v.type === 'CompoundExpr') {
+    v.expressions.push(value);
+    return v;
+  } else {
+    return value;;
+  }
+}
+
 function SentenceRule(iter) {
-  let subject, predicates = [], current = iter.current();
+  let subject, predicate, current = iter.current();
   while(current) {
     switch(current.type) {
       case 'StartToken':
@@ -62,7 +71,7 @@ function SentenceRule(iter) {
       case 'ConcreteNoun':
       case 'AbstractNoun':
       case 'ProperNoun':
-        if(subject || predicates.length) {
+        if(subject || predicate) {
           throw new ParserError(current);
         } else {
           subject = NounPhraseRule(iter);
@@ -70,12 +79,15 @@ function SentenceRule(iter) {
         }
         break;
       case 'Verb':
-        predicates.push(VerbPhraseRule(iter));
+        if(predicate) {
+          throw new ParserError(current);
+        }
+        predicate = VerbPhraseRule(iter);
         current = iter.current();
         break;
       case 'Terminator':
         return SentenceExpr({
-          subject, predicates
+          subject, predicate
         });
       default:
         throw new ParserError(current);
@@ -85,56 +97,64 @@ function SentenceRule(iter) {
 }
 
 function NounPhraseRule(iter) {
-  let subjects = [], current = iter.current();
+  let subject = CompoundExpr({ expressions: [] }), 
+      current = iter.current();
   while(current) {
     switch(current.type) {
       case 'ProNoun':
       case 'ConcreteNoun':
       case 'AbstractNoun':
       case 'ProperNoun':
-        subjects.push(current);
+        subject.expressions.push(current);
+        current = iter.next();
+        break;
+      case 'Conjunction':
+        if(!subject.expressions.length) {
+          throw new ParserError(current);
+        }
         current = iter.next();
         break;
       default:
-        if(!subjects.length) {
+        if(!subject) {
           throw new ParserError(current);
         }
-        return NounPhraseExpr({ subjects });
+        return NounPhraseExpr({ subject });
     }
   }
   throw new ParserError(current);
 }
 
+
 function VerbPhraseRule(iter) {
-  let predicate, objects = [], current = iter.current();
+  let predicate = CompoundExpr({ expressions: [] }), 
+      object = CompoundExpr({ expressions: [] }), 
+      current = iter.current();
   while(current) {
     switch(current.type) {
       case 'Verb':
-        if(predicate) {
-          return VerbPhraseExpr({
-            predicate, objects
-          });
-        }
-        predicate = current;
+        predicate.expressions.push(current);
         current = iter.next();
         break;
       case 'PrePosition':
-        objects.push(PrePositionRule(iter));
+        object.expressions.push(PrePositionRule(iter));
         current = iter.current();
         break;
       case 'ProNoun':
       case 'ConcreteNoun':
       case 'AbstractNoun':
       case 'ProperNoun':
-        objects.push(NounPhraseRule(iter));
+        object.expressions.push(NounPhraseRule(iter));
         current = iter.current();
         break;
+      case 'Conjunction':
+        current = iter.next();
+        break;
       default:
-        if(!objects) {
+        if(!predicate) {
           throw new ParserError(current);
         }
         return VerbPhraseExpr({
-          predicate, objects
+          predicate, object
         });
     }
   }
@@ -142,43 +162,48 @@ function VerbPhraseRule(iter) {
 }
 
 function PrePositionRule(iter) {
-  let positions = [], object, current = iter.current();
+  let position = CompoundExpr({ expressions: [] }), 
+      object = CompoundExpr({ expressions: [] }), 
+      current = iter.current();
   while(current) {
     switch(current.type) {
       case 'PrePosition':
-        if(object) {
+        if(object.expressions.length) {
           return PrePositionExpr({
-            positions, object
+            position, object
           });
         }
-        positions.push(current);
+        position.expressions.push(current);
         current = iter.next();
         break;
       case 'Verb':
-        if(object) {
+        if(object.expressions.length) {
           return PrePositionExpr({
-            positions, object
+            position, object
           });
         }
-        object = VerbPhraseRule(iter);
+        object.expressions.push(VerbPhraseRule(iter));
         current = iter.current();
         break;
       case 'ProNoun':
       case 'ConcreteNoun':
       case 'AbstractNoun':
       case 'ProperNoun':
-        if(object) {
+        if(object.expressions.length) {
           throw new ParserError(current);
         }
-        object = NounPhraseRule(iter);
+        object.expressions.push(NounPhraseRule(iter));
         current = iter.current();
         break;
+      case 'Conjunction':
+        current = iter.next();
+        break;
       default:
-        if(!object) {
+        if(!object.expressions.length) {
           throw new ParserError(current);
         }
         return PrePositionExpr({
-          positions, object
+          position, object
         });
     }
   }
@@ -199,7 +224,7 @@ function REPL() {
     console.log(SentenceRule(TokenIterator(parts.map(p => dict[p]))));
   });
 }
-REPL();
+//REPL();
 runTests();
 
 function runTests() {
@@ -209,9 +234,14 @@ function runTests() {
     'james smoke weed .',
     'james smoke weed to death .',
     'james smoke weed to death ?',
-    'james john james drink beer on thursday tuesday .',
-    'james john james drink beer from thursday to tuesday drive to shop .',
-    'go from drink to drive in october december .'
-  ].forEach(string =>
-    console.log(SentenceRule(TokenIterator(string.split(' ').map(p => dict[p])))));
+    'james , john and sue drink beer on thursday and tuesday .',
+    'james , john and peter drink beer from thursday , to tuesday .',
+    'go from drink to drive in october , december .',
+    'james , john drink and drive .',
+    'james , john drink and drive to and from house .',
+    'james , john drink and drive to shop and to house .'
+  ].forEach(string => {
+    const parsed = SentenceRule(TokenIterator(string.split(' ').map(p => dict[p])));
+    console.log(JSON.stringify(parsed, null, 2));
+  });
 }

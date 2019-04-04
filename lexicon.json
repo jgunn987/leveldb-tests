@@ -15,6 +15,7 @@
   "peter": { "type": "ProperNoun" },
 
   "shop": { "type": "ConcreteNoun" },
+  "house": { "type": "ConcreteNoun" },
   "weed": { "type": "ConcreteNoun" },
   "crack": { "type": "ConcreteNoun" },
   "beer": { "type": "ConcreteNoun" },
