@@ -151,29 +151,25 @@ function PrePositionConjRule(iter) {
 }
 
 function VerbPhraseRule(iter) {
-  const left = iter.current();
+  let left = iter.current(), right;
   switch(iter.next().type) {
     case 'PrePosition':
-      return VerbPhraseNode({ 
-        left, right: PrePositionRule(iter)
-      });
+      right = PrePositionRule(iter);
+      break;
     case 'ProNoun':
     case 'ConcreteNoun':
     case 'AbstractNoun':
     case 'ProperNoun':
-      return VerbPhraseNode({ 
-        left, right: NounPhraseRule(iter)
-      });
+      right = NounPhraseRule(iter);
+      break;
     case 'Verb':
-      return VerbPhraseNode({ 
-        left, right: VerbPhraseRule(iter)
-      });
+      right = VerbPhraseRule(iter);
+      break;
     case 'Conjunction':
-      return VerbPhraseNode({
-        left, right: VerbPhraseConjRule(iter)
-      });
+      right = VerbPhraseConjRule(iter);
+      break;
   }
-  return VerbPhraseNode({ left });
+  return VerbPhraseNode({ left, right });
 }
 
 function VerbPhraseConjRule(iter) {
