@@ -51,21 +51,16 @@ function CompoundSentenceRule(iter) {}
 function ConditionalSentenceRule(iter) {}
 function InterrogativeSentenceRule(iter) {}
 
-function assign(v, value) {
-  if(v && v.type === 'CompoundExpr') {
-    v.expressions.push(value);
-    return v;
-  } else {
-    return value;;
-  }
-}
-
 function SentenceRule(iter) {
   let subject, predicate, current = iter.current();
   while(current) {
     switch(current.type) {
       case 'StartToken':
         current = iter.next();
+        break;
+      case 'PrePosition':
+        subject = PrePositionRule(iter);
+        current = iter.current();
         break;
       case 'ProNoun':
       case 'ConcreteNoun':
@@ -101,6 +96,10 @@ function NounPhraseRule(iter) {
       current = iter.current();
   while(current) {
     switch(current.type) {
+      case 'PrePosition':
+        subject.expressions.push(PrePositionRule(iter));
+        current = iter.current();
+        break;
       case 'ProNoun':
       case 'ConcreteNoun':
       case 'AbstractNoun':
@@ -132,7 +131,11 @@ function VerbPhraseRule(iter) {
   while(current) {
     switch(current.type) {
       case 'Verb':
-        predicate.expressions.push(current);
+        if(object.expressions.length) {
+          object.expressions.push(current);
+        } else {
+          predicate.expressions.push(current);
+        }
         current = iter.next();
         break;
       case 'PrePosition':
@@ -221,7 +224,9 @@ function REPL() {
     terminal: false
   }).on('line', function(line){
     const parts = line.split(' ');
-    console.log(SentenceRule(TokenIterator(parts.map(p => dict[p]))));
+    parts.push('.');
+    const parsed = SentenceRule(TokenIterator(parts.map(p => dict[p])));
+    console.log(JSON.stringify(parsed, null, 2));
   });
 }
 //REPL();
@@ -229,6 +234,7 @@ runTests();
 
 function runTests() {
   [
+/*
     'james .',
     'james smoke .',
     'james smoke weed .',
@@ -237,9 +243,15 @@ function runTests() {
     'james , john and sue drink beer on thursday and tuesday .',
     'james , john and peter drink beer from thursday , to tuesday .',
     'go from drink to drive in october , december .',
-    'james , john drink and drive .',
-    'james , john drink and drive to and from house .',
-    'james , john drink and drive to shop and to house .'
+    'james and john drink and drive .',
+    'james and john drink and drive to and from house .',
+    'james and john drink and drive to shop and to house .',
+    'i go from shop to smoke weed .',
+    'i go to shop to eat and to drink beer .',
+    'weed to death .',
+    'to drink go to james .',
+*/
+    'i go to death and die .',
   ].forEach(string => {
     const parsed = SentenceRule(TokenIterator(string.split(' ').map(p => dict[p])));
     console.log(JSON.stringify(parsed, null, 2));
