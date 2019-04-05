@@ -10,7 +10,7 @@ function TokenIterator(tokens) {
     current: () => tokens[cursor],
     peek: () => tokens[cursor+1],
     next: () => tokens[++cursor],
-    prev: () => tokens[(cursor - 1) || 0]
+    prev: () => tokens[(--cursor) || 0]
   };
 }
 
@@ -80,7 +80,6 @@ function parse(iter) {
   }
 
   function NounPhraseRecurse(node) {
-    let op = '';
     switch(iter.peek().type) {
       case 'PrePosition':
         iter.next();
@@ -88,20 +87,21 @@ function parse(iter) {
           left: node, right: PrePositionPhrase()
         }));
       case 'Conjunction':
-        const conj = iter.next();
-        switch(iter.peek().type) {
+        const op = iter.next();
+        iter.next();
+        switch(iter.current().type) {
           case 'Determiner':
           case 'ProNoun':
           case 'ConcreteNoun':
           case 'AbstractNoun':
           case 'ProperNoun':
             return NounPhraseRecurse(NounPhraseNode({
-              left: node, op: conj
+              left: node, op, right: NounPhrase()
             }));
         }
-        return NounPhraseNode({
-          left: node
-        });
+        iter.prev();
+        iter.prev();
+        return node;
       case 'Determiner':
       case 'ProNoun':
       case 'ConcreteNoun':
@@ -141,18 +141,19 @@ function parse(iter) {
   }
 
   function VerbPhraseRecurse(node) {
-    let op = '';
     switch(iter.peek().type) {
       case 'Conjunction':
-        const conj = iter.next();
-        if(iter.peek().type === 'Verb') {
-          return VerbPhraseRecurse(VerbPhraseNode({
-            left: node, op: conj
-          }));
+        const op = iter.next();
+        iter.next();
+        switch(iter.current().type) {
+          case 'Verb':
+            return VerbPhraseRecurse(VerbPhraseNode({
+              left: node, op, right: VerbPhrase()
+            }));
         }
-        return VerbPhraseNode({
-          left: node
-        });
+        iter.prev();
+        iter.prev();
+        return node;
       case 'Verb':
         iter.next();
         return VerbPhraseNode({
@@ -173,6 +174,7 @@ function parse(iter) {
               PrePositionPhraseNode({
                 left: current, right: VerbPhrase()
               }));
+          case 'Determiner':
           case 'ProNoun':
           case 'ConcreteNoun':
           case 'AbstractNoun':
@@ -187,19 +189,20 @@ function parse(iter) {
   }
 
   function PrePositionPhraseRecurse(node) {
-    let op = '';
     switch(iter.peek().type) {
       case 'Conjunction':
-        const conj = iter.next();
-        if(iter.peek().type === 'PrePosition') {
-          return PrePositionPhraseRecurse(
-            PrePositionPhraseNode({
-              left: node, op: conj
-            }));
+        const op = iter.next();
+        iter.next();
+        switch(iter.current().type) {
+          case 'Preposition':
+            return PrePositionPhraseRecurse(
+              PrePositionPhraseNode({
+                left: node, op, right: PrePositionPhrase()
+              }));
         }
-        return PrePositionNode({
-          left: node
-        });
+        iter.prev();
+        iter.prev();
+        return node;
       case 'PrePosition':
         iter.next();
         return PrePositionPhraseNode({
@@ -233,8 +236,10 @@ function runTests() {
     //'the car to james .',
     //'the shop the car the house james john .',
     'a car from john go and drive .',
+    'a car go to and from shop .',
     'a car from john go to sue and go to james and drive to shop .',
-    //'a car and john and sue peter go drive and smoke weed .',
+    'john and james and peter .',
+    'a car and john and sue peter drive and drink to the shop and smoke weed .',
 /*
     'james , john and peter drink beer from thursday , to tuesday .',
     'go from drink to drive in october , december .',
