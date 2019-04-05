@@ -26,6 +26,7 @@ function Node(type) {
 
 const types = {
   StartToken: Token('StartToken'),
+  Determiner: Token('Determiner'),
   ProperNoun: Token('ProperNoun'),
   AbstractNoun: Token('AbstractNoun'),
   ConcreteNoun: Token('ConcreteNoun'),
@@ -41,143 +42,174 @@ const types = {
 
 const SentenceNode = Node('Sentence');
 const NounPhraseNode = Node('NounPhrase');
-const NounPhraseConjNode = Node('NounPhraseConj');
-const PrePositionNode = Node('PrePosition');
-const PrePositionConjNode = Node('PrePositionConj');
+const PrePositionPhraseNode = Node('PrePositionPhrase');
 const VerbPhraseNode = Node('VerbPhrase');
-const VerbPhraseConjNode = Node('VerbPhraseConj');
 
-function SentenceRule(iter) {
-  const node = SentenceNode();
-  while(iter.current()) {
-    switch(iter.current().type) {
-      case 'PrePosition':
-        if(!node.left) {
-          // special case of sentence starting with PP
-          // e.g. to a park i will go
-          node.left = PrePositionRule(iter);
-        } else {
-          return node;
+function parse(iter) {
+
+  function Sentence() {
+    const subject = NounPhrase();
+    iter.next();
+    const predicate = VerbPhrase();
+    return SentenceNode({
+      left: subject, right: predicate
+    });
+  }
+
+  function NounPhrase() {
+    const current = iter.current();
+    switch(current.type) {
+      case 'Determiner':
+        switch(iter.peek().type) {
+          case 'ProNoun':
+          case 'ConcreteNoun':
+          case 'AbstractNoun':
+          case 'ProperNoun':
+            return NounPhraseRecurse(NounPhraseNode({
+              left: current, right: iter.next()
+            }));
         }
-        break;
       case 'ProNoun':
       case 'ConcreteNoun':
       case 'AbstractNoun':
       case 'ProperNoun':
-        if(!node.left) {
-          node.left = NounPhraseRule(iter);
-        } else {
-          return node;
-        }
-        break;
-      case 'Verb':
-        if(!node.left) {
-          // should we make an imperative node rule here?
-          node.left = VerbPhraseRule(iter);
-          return node;
-        } else {
-          node.right = VerbPhraseRule(iter);
-          return node;
-        }
-        break;
-      default:
-        return node;
+        return NounPhraseRecurse(NounPhraseNode({
+          left: iter.current()
+        }));
     }
   }
-}
 
-function NounPhraseRule(iter) {
-  const left = iter.current();
-  switch(iter.next().type) {
-    case 'PrePosition':
-      return NounPhraseNode({
-        left, right: PrePositionRule(iter)
-      });
-    case 'ProNoun':
-    case 'ConcreteNoun':
-    case 'AbstractNoun':
-    case 'ProperNoun':
-      return NounPhraseNode({
-        left, right: NounPhraseRule(iter)
-      });
-    case 'Conjunction':
-      return NounPhraseNode({
-        left, right: NounPhraseConjRule(iter)
-      });
+  function NounPhraseRecurse(node) {
+    let op = '';
+    switch(iter.peek().type) {
+      case 'PrePosition':
+        iter.next();
+        return NounPhraseRecurse(NounPhraseNode({
+          left: node, right: PrePositionPhrase()
+        }));
+      case 'Conjunction':
+        const conj = iter.next();
+        switch(iter.peek().type) {
+          case 'Determiner':
+          case 'ProNoun':
+          case 'ConcreteNoun':
+          case 'AbstractNoun':
+          case 'ProperNoun':
+            return NounPhraseRecurse(NounPhraseNode({
+              left: node, op: conj
+            }));
+        }
+        return NounPhraseNode({
+          left: node
+        });
+      case 'Determiner':
+      case 'ProNoun':
+      case 'ConcreteNoun':
+      case 'AbstractNoun':
+      case 'ProperNoun':
+        iter.next();
+        return NounPhraseNode({
+          left: node, right: NounPhrase()
+        });
+    }
+    return node;
   }
-  return NounPhraseNode({ left });
-}
 
-function NounPhraseConjRule(iter) {
-  const left = iter.current();
-  iter.next();
-  return NounPhraseConjNode({
-    left, right: NounPhraseRule(iter)
-  });
-}
-
-function PrePositionRule(iter) {
-  const left = iter.current();
-  switch(iter.next().type) {
-    case 'PrePosition':
-      return PrePositionNode({
-        left, right: PrePositionRule(iter)
-      });
-    case 'ProNoun':
-    case 'ConcreteNoun':
-    case 'AbstractNoun':
-    case 'ProperNoun':
-      return PrePositionNode({
-        left, right: NounPhraseRule(iter)
-      });
-    case 'Verb':
-      return PrePositionNode({
-        left, right: VerbPhraseRule(iter)
-      });
-    case 'Conjunction':
-      return PrePositionNode({
-        left, right: PrePositionConjRule(iter)
-      });
+  function VerbPhrase() {
+    const current = iter.current();
+    switch(current.type) {
+      case 'Verb':
+        switch(iter.peek().type) {
+          case 'PrePosition':
+            iter.next();
+            return VerbPhraseRecurse(VerbPhraseNode({
+              left: current, right: PrePositionPhrase()
+            }));
+          case 'ProNoun':
+          case 'ConcreteNoun':
+          case 'AbstractNoun':
+          case 'ProperNoun':
+            iter.next();
+            return VerbPhraseRecurse(VerbPhraseNode({
+              left: current, right: NounPhrase()
+            }));
+        }
+        return VerbPhraseRecurse(VerbPhraseNode({
+          left: current 
+        }));
+    }
   }
-  return PrePositionNode({ left });
-}
 
-function PrePositionConjRule(iter) {
-  const left = iter.current();
-  iter.next();
-  return PrePositionConjNode({
-    left, right: PrePositionRule(iter)
-  });
-}
-
-function VerbPhraseRule(iter) {
-  let left = iter.current(), right;
-  switch(iter.next().type) {
-    case 'PrePosition':
-      right = PrePositionRule(iter);
-      break;
-    case 'ProNoun':
-    case 'ConcreteNoun':
-    case 'AbstractNoun':
-    case 'ProperNoun':
-      right = NounPhraseRule(iter);
-      break;
-    case 'Verb':
-      right = VerbPhraseRule(iter);
-      break;
-    case 'Conjunction':
-      right = VerbPhraseConjRule(iter);
-      break;
+  function VerbPhraseRecurse(node) {
+    let op = '';
+    switch(iter.peek().type) {
+      case 'Conjunction':
+        const conj = iter.next();
+        if(iter.peek().type === 'Verb') {
+          return VerbPhraseRecurse(VerbPhraseNode({
+            left: node, op: conj
+          }));
+        }
+        return VerbPhraseNode({
+          left: node
+        });
+      case 'Verb':
+        iter.next();
+        return VerbPhraseNode({
+          left: node, right: VerbPhrase()
+        });
+    }
+    return node;
   }
-  return VerbPhraseNode({ left, right });
-}
 
-function VerbPhraseConjRule(iter) {
-  const left = iter.current();
-  iter.next();
-  return VerbPhraseConjNode({
-    left, right: VerbPhraseRule(iter)
-  });
+  function PrePositionPhrase() {
+    const current = iter.current();
+    switch(current.type) {
+      case 'PrePosition':
+        switch(iter.peek().type) {
+          case 'Verb':
+            iter.next();
+            return PrePositionPhraseRecurse(
+              PrePositionPhraseNode({
+                left: current, right: VerbPhrase()
+              }));
+          case 'ProNoun':
+          case 'ConcreteNoun':
+          case 'AbstractNoun':
+          case 'ProperNoun':
+            iter.next();
+            return PrePositionPhraseRecurse(
+              PrePositionPhraseNode({
+                left: current, right: NounPhrase()
+              }));
+        }
+    }
+  }
+
+  function PrePositionPhraseRecurse(node) {
+    let op = '';
+    switch(iter.peek().type) {
+      case 'Conjunction':
+        const conj = iter.next();
+        if(iter.peek().type === 'PrePosition') {
+          return PrePositionPhraseRecurse(
+            PrePositionPhraseNode({
+              left: node, op: conj
+            }));
+        }
+        return PrePositionNode({
+          left: node
+        });
+      case 'PrePosition':
+        iter.next();
+        return PrePositionPhraseNode({
+          left: node, right: PrePositionPhrase()
+        });
+    }
+    return node;
+  }
+
+  return Sentence();
 }
 
 const dict = _.fromPairs(_.toPairs(lexicon).map(pair =>
@@ -188,16 +220,21 @@ runTests();
 function runTests() {
   [
     /*
-    'james .',
-    'james smoke .',
-    'james smoke weed .',
+    //'james .',
+    //'james smoke .',
+    //'james smoke weed .',
+    //'james drive to john .',
     'james smoke weed to death .',
     'james and john .',
     'james , john and sue drink beer on thursday and tuesday .',
     'i go to shop to eat and to drink beer .',
     'i go to shop and to house .',
     */
-    'i go to and from .',
+    //'the car to james .',
+    //'the shop the car the house james john .',
+    'a car from john go and drive .',
+    'a car from john go to sue and go to james and drive to shop .',
+    //'a car and john and sue peter go drive and smoke weed .',
 /*
     'james , john and peter drink beer from thursday , to tuesday .',
     'go from drink to drive in october , december .',
@@ -210,7 +247,7 @@ function runTests() {
     'i go to death and die .',
 */
   ].forEach(string => {
-    const parsed = SentenceRule(TokenIterator(string.split(' ').map(p => dict[p])));
+    const parsed = parse(TokenIterator(string.split(' ').map(p => dict[p])));
     console.log(treeify.asTree(parsed, true));
     //console.log(JSON.stringify(parsed, null, 2));
   });

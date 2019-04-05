@@ -7,6 +7,9 @@
   "that": { "type": "ProNoun" },
   "us": { "type": "ProNoun" },
   
+  "a": { "type": "Determiner" },
+  "the": { "type": "Determiner" },
+
   "james": { "type": "ProperNoun" },
   "stephen": { "type": "ProperNoun" },
   "sue": { "type": "ProperNoun" },
@@ -15,6 +18,7 @@
   "peter": { "type": "ProperNoun" },
 
   "shop": { "type": "ConcreteNoun" },
+  "car": { "type": "ConcreteNoun" },
   "house": { "type": "ConcreteNoun" },
   "weed": { "type": "ConcreteNoun" },
   "crack": { "type": "ConcreteNoun" },

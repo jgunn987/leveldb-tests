@@ -14,7 +14,6 @@ const AuxVerb = { test: test(lexicon.AuxVerb) };
 
 main -> Sentence
 Sentence -> NP VP | NP VP | VP
-Nominal -> %Noun Nominal | %Noun
-NP -> %Pronoun | %ProperNoun | %Determiner Nominal
-VP -> %Verb | %Verb NP | %Verb NP PP | %Verb PP | %Verb PP PP
+NP -> %Determiner %Noun | %Noun NP
 PP -> %Preposition NP
+VP -> %Verb | %Verb NP | %Verb NP PP | %Verb PP | %Verb PP PP
