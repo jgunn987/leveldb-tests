@@ -168,6 +168,13 @@ function parse(iter) {
     switch(current.type) {
       case 'PrePosition':
         switch(iter.peek().type) {
+          case 'Conjunction':
+            const op = iter.next();
+            iter.next();
+            return PrePositionPhraseRecurse(
+              PrePositionPhraseNode({
+                left: current, op, right: PrePositionPhrase()
+              }));
           case 'Verb':
             iter.next();
             return PrePositionPhraseRecurse(
@@ -190,19 +197,6 @@ function parse(iter) {
 
   function PrePositionPhraseRecurse(node) {
     switch(iter.peek().type) {
-      case 'Conjunction':
-        const op = iter.next();
-        iter.next();
-        switch(iter.current().type) {
-          case 'Preposition':
-            return PrePositionPhraseRecurse(
-              PrePositionPhraseNode({
-                left: node, op, right: PrePositionPhrase()
-              }));
-        }
-        iter.prev();
-        iter.prev();
-        return node;
       case 'PrePosition':
         iter.next();
         return PrePositionPhraseNode({
@@ -240,6 +234,8 @@ function runTests() {
     'a car from john go to sue and go to james and drive to shop .',
     'john and james and peter .',
     'a car and john and sue peter drive and drink to the shop and smoke weed .',
+    'i go to and from death and die .',
+    'i go to and from the shop and drink beer .'
 /*
     'james , john and peter drink beer from thursday , to tuesday .',
     'go from drink to drive in october , december .',
@@ -249,7 +245,6 @@ function runTests() {
     'i go from shop to smoke weed .',
     'weed to death .',
     'to drink go to james .',
-    'i go to death and die .',
 */
   ].forEach(string => {
     const parsed = parse(TokenIterator(string.split(' ').map(p => dict[p])));
