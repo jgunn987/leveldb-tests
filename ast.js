@@ -306,8 +306,8 @@ function runTests() {
     'i go to and from death and die .',
     'i go to and from the shop and drink beer .',
     'james go to the shop to drink beer , peter go to the shop to drink beer , john go to the shop to drink beer .',
-    'the go go shop .',
-    'go to a shop .'
+    //'the go go shop .',
+    //'go to a shop .'
 
 /*
     'james , john and peter drink beer from thursday , to tuesday .',
