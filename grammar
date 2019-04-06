@@ -1,0 +1,7 @@
+main -> Sentence
+Sentence -> DeclarativeSentence | ImperativeSentence
+ImperativeSentence -> VP
+DeclarativeSentence -> NP VP
+NP -> %Determiner %Noun | %Noun NP
+PP -> %Preposition NP
+VP -> %Verb | %Verb NP | %Verb NP PP | %Verb PP | %Verb PP PP
