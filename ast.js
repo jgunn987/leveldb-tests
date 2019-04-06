@@ -89,9 +89,9 @@ function parse(iter) {
         iter.next();
         right = Sentence();
         if(!right) return;
-        return SentenceRecurse(NounPhraseNode({
+        return SentenceNode({
           left: node, op, right
-        }));
+        });
     }
     return node;
   }
@@ -158,8 +158,7 @@ function parse(iter) {
           case 'ConcreteNoun':
           case 'AbstractNoun':
           case 'ProperNoun':
-            const sentence = DeclarativeSentence();
-            if(sentence) {
+            if(op.id === ',' && DeclarativeSentence()) {
               iter.seek(start);
               return node;
             }
@@ -325,7 +324,8 @@ function runTests() {
     //'a car and john and sue peter drive and drink to the shop and smoke weed .',
     //'i go to and from death and die .',
     //'i go to and from the shop and drink beer .',
-    'james go to the shop to drink beer , peter go to the shop to drink beer , john go to the shop to drink beer .',
+    'james go to the shop to drink beer and smoke weed , peter go to the shop to drink beer , john go to the shop to drink beer and sue smoke weed .',
+    'james and john smoke weed .'
     //'the go go shop .',
     //'go to a shop .'
 
