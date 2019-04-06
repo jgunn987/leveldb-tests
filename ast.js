@@ -158,7 +158,7 @@ function parse(iter) {
           case 'ConcreteNoun':
           case 'AbstractNoun':
           case 'ProperNoun':
-            if(op.id === ',' && DeclarativeSentence()) {
+            if(op.id === ',' && Sentence()) {
               iter.seek(start);
               return node;
             }
