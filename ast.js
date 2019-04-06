@@ -48,9 +48,13 @@ function loadLexicon(lexicon) {
     [pair[0], types[pair[1].type]({ id: pair[0] })]));
 }
 
+
 function lexer(lexicon) {
-  return input => TokenIterator(input.split(' ').map(p => lexicon[p]));
+  return input => TokenIterator(
+    input.split(' ').filter(p => p !== '' && p !== '\n')
+      .map(p => lexicon[p]));
 }
+
 const SentenceNode = Node('Sentence');
 const DeclarativeSentenceNode = Node('DeclarativeSentence');
 const ImperativeSentenceNode = Node('ImperativeSentence');
@@ -90,7 +94,7 @@ function parse(iter) {
         right = Sentence();
         if(!right) return;
         return SentenceNode({
-          left: node, op, right
+          ...node, op, right
         });
     }
     return node;
@@ -324,7 +328,10 @@ function runTests() {
     //'a car and john and sue peter drive and drink to the shop and smoke weed .',
     //'i go to and from death and die .',
     //'i go to and from the shop and drink beer .',
-    'james go to the shop to drink beer and smoke weed , peter go to the shop to drink beer , john go to the shop to drink beer and sue smoke weed .',
+    `james go to the shop to drink beer and smoke weed , 
+     peter go to and from the shop to drink beer , 
+     john go to the shop to drink beer , 
+     sue smoke weed .`,
     'james and john smoke weed .'
     //'the go go shop .',
     //'go to a shop .'
