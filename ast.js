@@ -61,8 +61,8 @@ const VerbPhraseNode = Node('VerbPhrase');
 function parse(iter) {
 
   function Sentence() {
-    const current = iter.current();
     let sentence;
+    const current = iter.current();
     switch(current.type) {
       case 'PrePosition':
         return;
@@ -73,12 +73,27 @@ function parse(iter) {
       case 'ProperNoun':
         sentence = DeclarativeSentence();
         if(!sentence) return;
-        return SentenceNode({ left: sentence });
+        return SentenceRecurse(SentenceNode({ left: sentence }));
       case 'Verb':
         sentence = ImperativeSentence();
         if(!sentence) return;
-        return SentenceNode({ left: sentence });
+        return SentenceRecurse(SentenceNode({ left: sentence }));
     }
+  }
+
+  function SentenceRecurse(node) {
+    let right;
+    switch(iter.peek().type) {
+      case 'Conjunction':
+        const op = iter.next();
+        iter.next();
+        right = Sentence();
+        if(!right) return;
+        return SentenceRecurse(NounPhraseNode({
+          left: node, op, right
+        }));
+    }
+    return node;
   }
 
   function DeclarativeSentence() {
@@ -143,6 +158,11 @@ function parse(iter) {
           case 'ConcreteNoun':
           case 'AbstractNoun':
           case 'ProperNoun':
+            const sentence = DeclarativeSentence();
+            if(sentence) {
+              iter.seek(start);
+              return node;
+            }
             right = NounPhrase();
             if(!right) return;
             return NounPhraseRecurse(NounPhraseNode({
@@ -241,7 +261,7 @@ function parse(iter) {
               }));
           case 'Verb':
             iter.next();
-            right = PrePositionPhrase();
+            right = VerbPhrase();
             if(!right) return;
             return PrePositionPhraseRecurse(
               PrePositionPhraseNode({
@@ -298,13 +318,13 @@ function runTests() {
     */
     //'the car to james .',
     //'the shop the car the house james john .',
-    'a car from john go and drive .',
-    'a car go to and from shop .',
-    'a car from john go to sue and go to james and drive to shop .',
-    'john and james and peter .',
-    'a car and john and sue peter drive and drink to the shop and smoke weed .',
-    'i go to and from death and die .',
-    'i go to and from the shop and drink beer .',
+    //'a car from john go and drive .',
+    //'a car go to and from shop .',
+    //'a car from john go to sue and go to james and drive to shop .',
+    //'john and james and peter .',
+    //'a car and john and sue peter drive and drink to the shop and smoke weed .',
+    //'i go to and from death and die .',
+    //'i go to and from the shop and drink beer .',
     'james go to the shop to drink beer , peter go to the shop to drink beer , john go to the shop to drink beer .',
     //'the go go shop .',
     //'go to a shop .'
@@ -321,6 +341,7 @@ function runTests() {
 */
   ].forEach(string => {
     const parsed = parse(l(string));
+    console.log(string);
     console.log(treeify.asTree(parsed, true));
     //console.log(JSON.stringify(parsed, null, 2));
   });
