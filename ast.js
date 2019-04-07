@@ -145,13 +145,6 @@ function parse(iter) {
   function NounPhraseRecurse(node) {
     let right;
     switch(iter.peek().type) {
-      case 'PrePosition':
-        iter.next();
-        right = PrePositionPhrase();
-        if(!right) return;
-        return NounPhraseRecurse(NounPhraseNode({
-          left: node, right
-        }));
       case 'Conjunction':
         const start = iter.index();
         const op = iter.next();
@@ -222,6 +215,13 @@ function parse(iter) {
   function VerbPhraseRecurse(node) {
     let right;
     switch(iter.peek().type) {
+      case 'PrePosition':
+        iter.next();
+        right = PrePositionPhrase();
+        if(!right) return;
+        return VerbPhraseRecurse(VerbPhraseNode({
+          left: node, right
+        }));
       case 'Conjunction':
         const start = iter.index();
         const op = iter.next();
@@ -332,7 +332,11 @@ function runTests() {
      peter go to and from the shop to drink beer , 
      john go to the shop to drink beer , 
      sue smoke weed .`,
-    'james and john smoke weed .'
+    'james and john and sue smoke weed at shop .',
+    'james go to the shop and car to smoke weed .',
+    'i go james to john .',
+    'i go james .',
+    'i go to james to john .',
     //'the go go shop .',
     //'go to a shop .'
 
