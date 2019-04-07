@@ -58,6 +58,7 @@ function lexer(lexicon) {
 const SentenceNode = Node('Sentence');
 const DeclarativeSentenceNode = Node('DeclarativeSentence');
 const ImperativeSentenceNode = Node('ImperativeSentence');
+const PrePositionSentenceNode = Node('PrePositionSentence');
 const NounPhraseNode = Node('NounPhrase');
 const PrePositionPhraseNode = Node('PrePositionPhrase');
 const VerbPhraseNode = Node('VerbPhrase');
@@ -68,8 +69,11 @@ function parse(iter) {
     let sentence;
     const current = iter.current();
     switch(current.type) {
+      case 'Conjunction':
       case 'PrePosition':
-        return;
+        sentence = PrePositionSentence();
+        if(!sentence) return;
+        return SentenceRecurse(SentenceNode({ left: sentence }));
       case 'Determiner':
       case 'ProNoun':
       case 'ConcreteNoun':
@@ -94,10 +98,21 @@ function parse(iter) {
         right = Sentence();
         if(!right) return;
         return SentenceNode({
-          ...node, op, right
+          left: node.left, op, right
         });
     }
     return node;
+  }
+
+  function PrePositionSentence() {
+    const pp = PrePositionPhrase();
+    if(!pp) return;
+    iter.next();
+    const sentence = Sentence();
+    if(!sentence) return;
+    return PrePositionSentenceNode({
+      left: pp, right: sentence    
+    });
   }
 
   function DeclarativeSentence() {
@@ -167,17 +182,6 @@ function parse(iter) {
         }
         iter.seek(start);
         return node;
-      case 'Determiner':
-      case 'ProNoun':
-      case 'ConcreteNoun':
-      case 'AbstractNoun':
-      case 'ProperNoun':
-        iter.next();
-        right = NounPhrase();
-        if(!right) return;
-        return NounPhraseNode({
-          left: node, right
-        });
     }
     return node;
   }
@@ -336,7 +340,9 @@ function runTests() {
     'james go to the shop and car to smoke weed .',
     'i go james to john .',
     'i go james .',
-    'i go to james to john .',
+    'i go to james to john and go to shop .',
+    'to the shop i go .',
+    'peter and james and sue go to the shop .'
     //'the go go shop .',
     //'go to a shop .'
 
@@ -351,8 +357,9 @@ function runTests() {
     'to drink go to james .',
 */
   ].forEach(string => {
-    const parsed = parse(l(string));
     console.log(string);
+    const parsed = parse(l(string));
+    assert.ok(parsed);
     console.log(treeify.asTree(parsed, true));
     //console.log(JSON.stringify(parsed, null, 2));
   });
