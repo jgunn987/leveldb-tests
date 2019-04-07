@@ -342,9 +342,8 @@ function runTests() {
     'i go james .',
     'i go to james to john and go to shop .',
     'to the shop i go .',
-    'peter and james and sue go to the shop .'
-    //'the go go shop .',
-    //'go to a shop .'
+    'peter and james and sue go to the shop .',
+    'go to a shop .'
 
 /*
     'james , john and peter drink beer from thursday , to tuesday .',
