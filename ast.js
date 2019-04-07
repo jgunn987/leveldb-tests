@@ -48,7 +48,6 @@ function loadLexicon(lexicon) {
     [pair[0], types[pair[1].type]({ id: pair[0] })]));
 }
 
-
 function lexer(lexicon) {
   return input => TokenIterator(
     input.split(' ').filter(p => p !== '' && p !== '\n')
@@ -69,11 +68,52 @@ function parse(iter) {
     let sentence;
     const current = iter.current();
     switch(current.type) {
+      // you can start a sentence with a co-ordinating conjunction
       case 'Conjunction':
+        switch(current.id) {
+          // co-ordinating conjunctions
+          case ',':
+          case 'for':
+          case 'and':
+          case 'nor':
+          case 'but':
+          case 'or':
+          case 'yet':
+          case 'so':
+            break;
+          // sub ordinating conjunctions & correlative conjunctions
+          case 'if':
+          case 'once':
+          case 'even':
+          case 'before':
+          case 'because':
+          case 'both':
+          case 'after':
+          case 'either':
+          case 'niether':
+          case 'now':
+          case 'that':
+          case 'than':
+          case 'since':
+          case 'unless':
+          case 'until':
+          case 'when':
+          case 'whenever':
+          case 'where':
+          case 'wherever':
+          case 'wether':
+          case 'which':
+          case 'while':
+          case 'who':
+          case 'whoever':
+          case 'why':
+            break;
+        }
+        break;
       case 'PrePosition':
         sentence = PrePositionSentence();
         if(!sentence) return;
-        return SentenceRecurse(SentenceNode({ left: sentence }));
+        return SentenceNext(SentenceNode({ left: sentence }));
       case 'Determiner':
       case 'ProNoun':
       case 'ConcreteNoun':
@@ -81,15 +121,15 @@ function parse(iter) {
       case 'ProperNoun':
         sentence = DeclarativeSentence();
         if(!sentence) return;
-        return SentenceRecurse(SentenceNode({ left: sentence }));
+        return SentenceNext(SentenceNode({ left: sentence }));
       case 'Verb':
         sentence = ImperativeSentence();
         if(!sentence) return;
-        return SentenceRecurse(SentenceNode({ left: sentence }));
+        return SentenceNext(SentenceNode({ left: sentence }));
     }
   }
 
-  function SentenceRecurse(node) {
+  function SentenceNext(node) {
     let right;
     switch(iter.peek().type) {
       case 'Conjunction':
@@ -143,7 +183,7 @@ function parse(iter) {
           case 'ConcreteNoun':
           case 'AbstractNoun':
           case 'ProperNoun':
-            return NounPhraseRecurse(NounPhraseNode({
+            return NounPhraseNext(NounPhraseNode({
               left: current, right: iter.next()
             }));
         }
@@ -151,13 +191,13 @@ function parse(iter) {
       case 'ConcreteNoun':
       case 'AbstractNoun':
       case 'ProperNoun':
-        return NounPhraseRecurse(NounPhraseNode({
+        return NounPhraseNext(NounPhraseNode({
           left: iter.current()
         }));
     }
   }
 
-  function NounPhraseRecurse(node) {
+  function NounPhraseNext(node) {
     let right;
     switch(iter.peek().type) {
       case 'Conjunction':
@@ -176,7 +216,7 @@ function parse(iter) {
             }
             right = NounPhrase();
             if(!right) return;
-            return NounPhraseRecurse(NounPhraseNode({
+            return NounPhraseNext(NounPhraseNode({
               left: node, op, right
             }));
         }
@@ -196,7 +236,7 @@ function parse(iter) {
             iter.next();
             right = PrePositionPhrase();
             if(!right) return;
-            return VerbPhraseRecurse(VerbPhraseNode({
+            return VerbPhraseNext(VerbPhraseNode({
               left: current, right
             }));
           case 'ProNoun':
@@ -206,24 +246,24 @@ function parse(iter) {
             iter.next();
             right = NounPhrase();
             if(!right) return;
-            return VerbPhraseRecurse(VerbPhraseNode({
+            return VerbPhraseNext(VerbPhraseNode({
               left: current, right
             }));
         }
-        return VerbPhraseRecurse(VerbPhraseNode({
+        return VerbPhraseNext(VerbPhraseNode({
           left: current 
         }));
     }
   }
 
-  function VerbPhraseRecurse(node) {
+  function VerbPhraseNext(node) {
     let right;
     switch(iter.peek().type) {
       case 'PrePosition':
         iter.next();
         right = PrePositionPhrase();
         if(!right) return;
-        return VerbPhraseRecurse(VerbPhraseNode({
+        return VerbPhraseNext(VerbPhraseNode({
           left: node, right
         }));
       case 'Conjunction':
@@ -234,7 +274,7 @@ function parse(iter) {
           case 'Verb':
             right = VerbPhrase();
             if(!right) return;
-            return VerbPhraseRecurse(VerbPhraseNode({
+            return VerbPhraseNext(VerbPhraseNode({
               left: node, op, right
             }));
         }
@@ -262,7 +302,7 @@ function parse(iter) {
             iter.next();
             right = PrePositionPhrase();
             if(!right) return;
-            return PrePositionPhraseRecurse(
+            return PrePositionPhraseNext(
               PrePositionPhraseNode({
                 left: current, op, right
               }));
@@ -270,7 +310,7 @@ function parse(iter) {
             iter.next();
             right = VerbPhrase();
             if(!right) return;
-            return PrePositionPhraseRecurse(
+            return PrePositionPhraseNext(
               PrePositionPhraseNode({
                 left: current, right
               }));
@@ -282,7 +322,7 @@ function parse(iter) {
             iter.next();
             right = NounPhrase();
             if(!right) return;
-            return PrePositionPhraseRecurse(
+            return PrePositionPhraseNext(
               PrePositionPhraseNode({
                 left: current, right
               }));
@@ -290,7 +330,7 @@ function parse(iter) {
     }
   }
 
-  function PrePositionPhraseRecurse(node) {
+  function PrePositionPhraseNext(node) {
     switch(iter.peek().type) {
       case 'PrePosition':
         iter.next();
