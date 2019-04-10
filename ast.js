@@ -4,7 +4,7 @@ const assert = require('assert');
 const lexicon = require('./lexicon.json');
 const treeify = require('treeify');
 
-function TokenIterator(tokens) {
+function Iterator(tokens) {
   let cursor = 0;
   let length = tokens.length;
   return {
@@ -40,6 +40,8 @@ const types = {
   Conjunction: Token('Conjunction'),
   Adverb: Token('Adverb'),
   Verb: Token('Verb'),
+  // modal verb
+  // auxillary verb
   Terminator: Token('Terminator'),
 };
 
@@ -49,7 +51,7 @@ function loadLexicon(lexicon) {
 }
 
 function lexer(lexicon) {
-  return input => TokenIterator(
+  return input => Iterator(
     input.split(' ').filter(p => p !== '' && p !== '\n')
       .map(p => lexicon[p]));
 }
@@ -346,10 +348,7 @@ function parse(iter) {
   return Sentence();
 }
 
-
-runTests();
-
-function runTests() {
+(function() {
   const l = lexer(loadLexicon(lexicon));
   [
     /*
@@ -382,8 +381,8 @@ function runTests() {
     'i go james .',
     'i go to james to john and go to shop .',
     'to the shop i go .',
+    'go to a shop .',
     'peter and james and sue go to the shop .',
-    'go to a shop .'
 
 /*
     'james , john and peter drink beer from thursday , to tuesday .',
@@ -402,4 +401,4 @@ function runTests() {
     console.log(treeify.asTree(parsed, true));
     //console.log(JSON.stringify(parsed, null, 2));
   });
-}
+})();
